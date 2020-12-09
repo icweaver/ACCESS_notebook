@@ -14,19 +14,10 @@ macro bind(def, element)
 end
 
 # ╔═╡ de8e285c-f93c-11ea-1571-a5a5dbc48e3c
-using PlutoUI, Plots, StatsPlots, CSV, CCDReduction, FITSIO, DataFrames, DataFramesMeta, Glob, AstroImages, HDF5, Dates, Printf, PyCall, RecursiveArrayTools, BenchmarkTools, Statistics
-
-# ╔═╡ 061dec8c-f8a6-11ea-2c18-bfe11f798840
-md"### Data inspection"
+using PlutoUI, Plots, StatsPlots, CSV, CCDReduction, FITSIO, DataFrames, DataFramesMeta, Glob, AstroImages, HDF5, Dates, Printf, PyCall, RecursiveArrayTools, BenchmarkTools, Statistics, PaddedViews
 
 # ╔═╡ cea3f932-f935-11ea-0eb3-4f47e65da5fa
-md"#### $(@bind run_raw_stats CheckBox()) File stats"
-
-# ╔═╡ cc4c4cf6-f8a7-11ea-3ed3-837369572d73
-begin
-	data_path = "data/HATP23/ut180603"
-	project_path = "projects/HATP23b"
-end
+md"## $(@bind run_raw_stats CheckBox()) File stats"
 
 # ╔═╡ 18536d9c-f922-11ea-02ed-5340b350c0c0
 if run_raw_stats
@@ -85,23 +76,38 @@ if run_raw_stats
 end
 
 # ╔═╡ 0110f78a-f945-11ea-004c-291cbfd9365c
-md"#### $(@bind run_tepspec CheckBox()) `tepspec` exploration"
+md"## $(@bind run_tepspec CheckBox()) `tepspec` exploration"
 
-# ╔═╡ 549b2c4a-39be-11eb-292a-6d11eec4ae23
-const DATA_RED = "/home/mango/cfa/mercedes/ACCESS/data/data_reductions"
+# ╔═╡ 362246e4-3a44-11eb-14b3-13a687b7f39b
+const DATA_RED = "../Projects/HATP26b/data_reductions"
 
 # ╔═╡ e7e183b0-fb4c-11ea-157d-c11e7dbb1a1c
 md"#### $(@bind trace CheckBox()) Trace"
 
-# ╔═╡ 559bb118-fbad-11ea-0b5c-7137c99c5b4c
-dirpath_trace = "./data/data_reductions/HATP23/ut180821_a15_25_noflat"
-
 # ╔═╡ 93b51aba-fba4-11ea-2181-a9f87f9348e4
 md"#### $(@bind extracted_spectra CheckBox()) Extracted spectra"
 
+# ╔═╡ efde1340-3a57-11eb-10a8-63a5e2f99c30
+md"""
+plots items in `<object>_spec.fits` files \
+has shape time x spec_item x ypix (|| to wav direction)
+```julia
+i =
+0: Wavelength
+1: Simple extracted object spectrum
+2: Simple extracted flat spectrum
+3: Pixel sensitivity (obtained by the flat)
+4: Simple extracted object spectrum/pixel sensitivity
+5: Sky flag (0 = note uneven sky, 1 = probably uneven profile,
+   2 = Sky_Base failed)
+6: Optimally extracted object spectrum
+7: Optimally extracted object spectrum/pixel sensitivity
+```
+"""
+
 # ╔═╡ 25af8e98-fba8-11ea-2089-db810bb8778a
 function plot_spectra!(p, data; i=2, label=nothing)
-	d = data[:, i, :]
+	d = data[:, i+1, :]
 	extracted_spectra_med = median(d, dims=2)
 	σ = std(d, dims=2)
 	plot!(
@@ -118,18 +124,13 @@ end
 
 # ╔═╡ 9edfdb1e-fba4-11ea-2223-a5266f7ec2bb
 if extracted_spectra
-	fpaths_extracted_spectra = glob(
-		"data/data_reductions/HATP23/ut180603_a15_25_noflat/*spec.fits",
-	)
-	datas = []
 	p = plot()
-	for fpath in fpaths_extracted_spectra
+	for fpath in glob("$DATA_RED/ut190313_a15_25_noflat_LBR/*spec.fits")
 		FITS(fpath) do f
 			data = read(f[1])
-			plot_spectra!(p, data, label=basename(fpath))
+			plot_spectra!(p, data, label=basename(fpath), i=6)
 		end
-	end
-	
+	end	
 	p
 end
 
@@ -205,8 +206,7 @@ end
 # ╔═╡ 65530184-f968-11ea-3f55-7d8a470384ed
 if run_tepspec
 	data = load_pickle(
-		#"$DATA_RED/HATP26/ut190313_a15_25_noflat_LBR/LCs_hp26_bins.pkl"
-		"/home/mango/Desktop/LCs_hp26_bins.pkl"
+		"$DATA_RED/ut190313_a15_25_noflat_LBR/LCs_hp26_bins.pkl"
 	)
 	flux_target = data["oLC"]
 	flux_comps = data["cLC"]
@@ -242,33 +242,26 @@ end
 
 # ╔═╡ d6251ef2-fb4c-11ea-1ce3-97a485de4b95
 if trace
-	XX = load_pickle("$dirpath_trace/XX.pkl")
-    YY = load_pickle("$dirpath_trace/YY.pkl")
+	XX = load_pickle("$DATA_RED/ut190313_a15_25_noflat_LBR/XX.pkl")
+    YY = load_pickle("$DATA_RED/ut190313_a15_25_noflat_LBR/YY.pkl")
 	
 	md"""
-	Number of traces to show for:
+	**Number of traces to show for:**
 	$(@bind trace_key Select(collect([Pair(key,key) for key in keys(XX)])))
-	$(@bind num_traces Slider(2:10, show_value=true))
+	$(@bind num_traces Slider(2:7, show_value=true))
 	"""
 end
 
 # ╔═╡ 6d2b41fc-fb96-11ea-0ca4-1d62d94d25d7
-if trace
-	pad_zero!(arr, N) = push!(arr, zeros(N - length(arr))...)
-	Nmax = maximum(length.(XX[trace_key]))
-	for (tr_x, tr_y) in zip(XX[trace_key], YY[trace_key])
-		length(tr_x) < Nmax && pad_zero!(tr_x, Nmax)
-		length(tr_y) < Nmax && pad_zero!(tr_y, Nmax)
-	end
-	xx = convert(Array, VectorOfArray(XX[trace_key]))
-	yy = convert(Array, VectorOfArray(YY[trace_key]))
-	skip_trace = Int64(ceil(size(xx, 2) / num_traces))
+if trace	
+	trace_idxs = round.(Int, range(1, length(XX[trace_key]), length=num_traces))
 	plot(
-		xx[:, 1:skip_trace:end],
-		yy[:, 1:skip_trace:end],
-		label = 1:1,
+		XX[trace_key][trace_idxs],
+		YY[trace_key][trace_idxs],
+		label = reshape(trace_idxs, 1, :) .- 1,
 		title = trace_key,
 		legend = :left,
+		legend_title = "trace 0-index",
 		palette = palette(:diverging_isoluminant_cjo_70_c25_n256, num_traces),
 	)
 end
@@ -287,23 +280,21 @@ end
 plotly()
 
 # ╔═╡ Cell order:
-# ╟─061dec8c-f8a6-11ea-2c18-bfe11f798840
 # ╟─cea3f932-f935-11ea-0eb3-4f47e65da5fa
-# ╠═cc4c4cf6-f8a7-11ea-3ed3-837369572d73
 # ╟─18536d9c-f922-11ea-02ed-5340b350c0c0
 # ╠═f802dde4-f92a-11ea-2bf6-bd8d80f69a3a
 # ╟─0110f78a-f945-11ea-004c-291cbfd9365c
-# ╠═549b2c4a-39be-11eb-292a-6d11eec4ae23
+# ╠═362246e4-3a44-11eb-14b3-13a687b7f39b
 # ╠═65530184-f968-11ea-3f55-7d8a470384ed
 # ╟─6f8188e8-f98f-11ea-0bd4-bd30f24b976e
-# ╠═51666c34-39bd-11eb-0e2a-2371e207dce8
+# ╟─51666c34-39bd-11eb-0e2a-2371e207dce8
 # ╟─e7e183b0-fb4c-11ea-157d-c11e7dbb1a1c
-# ╠═559bb118-fbad-11ea-0b5c-7137c99c5b4c
-# ╠═d6251ef2-fb4c-11ea-1ce3-97a485de4b95
-# ╟─6d2b41fc-fb96-11ea-0ca4-1d62d94d25d7
+# ╟─d6251ef2-fb4c-11ea-1ce3-97a485de4b95
+# ╠═6d2b41fc-fb96-11ea-0ca4-1d62d94d25d7
 # ╟─93b51aba-fba4-11ea-2181-a9f87f9348e4
-# ╟─9edfdb1e-fba4-11ea-2223-a5266f7ec2bb
-# ╟─25af8e98-fba8-11ea-2089-db810bb8778a
+# ╟─efde1340-3a57-11eb-10a8-63a5e2f99c30
+# ╠═9edfdb1e-fba4-11ea-2223-a5266f7ec2bb
+# ╠═25af8e98-fba8-11ea-2089-db810bb8778a
 # ╟─767b67be-3714-11eb-2a8b-e13213320300
 # ╟─586f547e-3714-11eb-0fa1-cf1a1ebd5f50
 # ╟─8fbbec74-f970-11ea-34d8-174a293a4107
