@@ -16,6 +16,11 @@ end
 # ╔═╡ de8e285c-f93c-11ea-1571-a5a5dbc48e3c
 using PlutoUI, Plots, StatsPlots, CSV, CCDReduction, FITSIO, DataFrames, DataFramesMeta, Glob, AstroImages, HDF5, Dates, Printf, PyCall, RecursiveArrayTools, BenchmarkTools, Statistics, PaddedViews
 
+# ╔═╡ 7b37c734-3a70-11eb-006b-c75ac3f4ea6e
+begin
+	import DarkMode
+end
+
 # ╔═╡ cea3f932-f935-11ea-0eb3-4f47e65da5fa
 md"## $(@bind run_raw_stats CheckBox()) File stats"
 
@@ -79,59 +84,82 @@ end
 md"## $(@bind run_tepspec CheckBox()) `tepspec` exploration"
 
 # ╔═╡ 362246e4-3a44-11eb-14b3-13a687b7f39b
-const DATA_RED = "../Projects/HATP26b/data_reductions"
+const DATA_RED = "./Projects/HATP26b/data_reductions"
 
 # ╔═╡ e7e183b0-fb4c-11ea-157d-c11e7dbb1a1c
 md"#### $(@bind trace CheckBox()) Trace"
 
 # ╔═╡ 93b51aba-fba4-11ea-2181-a9f87f9348e4
-md"#### $(@bind extracted_spectra CheckBox()) Extracted spectra"
+md"#### $(@bind init_extracted_spectra CheckBox()) Intitial Extracted spectra"
 
-# ╔═╡ efde1340-3a57-11eb-10a8-63a5e2f99c30
+# ╔═╡ 61c9a1ea-3c1a-11eb-2623-ff87059cf057
 md"""
-plots items in `<object>_spec.fits` files \
-has shape time x spec_item x ypix (|| to wav direction)
-```julia
-i =
-0: Wavelength
-1: Simple extracted object spectrum
-2: Simple extracted flat spectrum
-3: Pixel sensitivity (obtained by the flat)
-4: Simple extracted object spectrum/pixel sensitivity
-5: Sky flag (0 = note uneven sky, 1 = probably uneven profile,
-   2 = Sky_Base failed)
-6: Optimally extracted object spectrum
-7: Optimally extracted object spectrum/pixel sensitivity
-```
+From spec.fits files
 """
 
+# ╔═╡ 6b0c5d92-3bf7-11eb-03eb-871c9ffbd2e8
+@bind extr_spec_key Select([
+	"Wavelength",
+	"Simple extracted object spectrum",
+	"Simple extracted flat spectrum",
+	"Pixel sensitivity (obtained by the flat)",
+	"Simple extracted object spectrum/pixel sensitivity",
+	"Sky flag (0 = note uneven sky, 1 = probably uneven profile,
+		2 = Sky_Base failed)",
+	"Optimally extracted object spectrum",
+	"Optimally extracted object spectrum/pixel sensitivity",
+		])
+
 # ╔═╡ 25af8e98-fba8-11ea-2089-db810bb8778a
-function plot_spectra!(p, data; i=2, label=nothing)
+function plot_spectra!(p, data; key="Wavelength", label=nothing)
+	i = Dict(
+		"Wavelength" => 0,
+		"Simple extracted object spectrum" => 1,
+		"Simple extracted flat spectrum" => 2,
+		"Pixel sensitivity (obtained by the flat)" => 3,
+		"Simple extracted object spectrum/pixel sensitivity" => 4,
+		"Sky flag (0 = note uneven sky, 1 = probably uneven profile,
+			2 = Sky_Base failed)" => 5,
+		"Optimally extracted object spectrum" => 6,
+		"Optimally extracted object spectrum/pixel sensitivity" => 7,
+	)[key]
 	d = data[:, i+1, :]
 	extracted_spectra_med = median(d, dims=2)
 	σ = std(d, dims=2)
 	plot!(
 		p,
-		extracted_spectra_med ./ maximum(extracted_spectra_med),
-		ribbon=(
-			σ / maximum(extracted_spectra_med),
-			σ / maximum(extracted_spectra_med),
-		),
+		extracted_spectra_med, #./ maximum(extracted_spectra_med),
+		# ribbon=(
+		# 	σ / maximum(extracted_spectra_med),
+		# 	σ / maximum(extracted_spectra_med),
+		# ),
 		label = label,
-		legend = :bottomleft,
+		legend = :topright,
 	)
 end
 
 # ╔═╡ 9edfdb1e-fba4-11ea-2223-a5266f7ec2bb
-if extracted_spectra
+if init_extracted_spectra
 	p = plot()
 	for fpath in glob("$DATA_RED/ut190313_a15_25_noflat_LBR/*spec.fits")
 		FITS(fpath) do f
 			data = read(f[1])
-			plot_spectra!(p, data, label=basename(fpath), i=6)
+			plot_spectra!(p, data, label=basename(fpath), key=extr_spec_key)
 		end
 	end	
 	p
+end
+
+# ╔═╡ a8e8d9e2-3c1a-11eb-2bc3-bd1f05686d01
+md"#### $(@bind final_extracted_spectra CheckBox()) Final Extracted spectra"
+
+# ╔═╡ e6440db6-3c1a-11eb-14a4-81c7c7b23a80
+md"""
+From tepspec pickle
+"""
+
+# ╔═╡ dc2a31a2-3c1a-11eb-0627-e76f27095b61
+if final_extracted_spectra
 end
 
 # ╔═╡ 767b67be-3714-11eb-2a8b-e13213320300
@@ -280,6 +308,7 @@ end
 plotly()
 
 # ╔═╡ Cell order:
+# ╠═7b37c734-3a70-11eb-006b-c75ac3f4ea6e
 # ╟─cea3f932-f935-11ea-0eb3-4f47e65da5fa
 # ╟─18536d9c-f922-11ea-02ed-5340b350c0c0
 # ╠═f802dde4-f92a-11ea-2bf6-bd8d80f69a3a
@@ -292,9 +321,13 @@ plotly()
 # ╟─d6251ef2-fb4c-11ea-1ce3-97a485de4b95
 # ╠═6d2b41fc-fb96-11ea-0ca4-1d62d94d25d7
 # ╟─93b51aba-fba4-11ea-2181-a9f87f9348e4
-# ╟─efde1340-3a57-11eb-10a8-63a5e2f99c30
-# ╠═9edfdb1e-fba4-11ea-2223-a5266f7ec2bb
-# ╠═25af8e98-fba8-11ea-2089-db810bb8778a
+# ╟─61c9a1ea-3c1a-11eb-2623-ff87059cf057
+# ╟─6b0c5d92-3bf7-11eb-03eb-871c9ffbd2e8
+# ╟─9edfdb1e-fba4-11ea-2223-a5266f7ec2bb
+# ╟─25af8e98-fba8-11ea-2089-db810bb8778a
+# ╟─a8e8d9e2-3c1a-11eb-2bc3-bd1f05686d01
+# ╟─e6440db6-3c1a-11eb-14a4-81c7c7b23a80
+# ╠═dc2a31a2-3c1a-11eb-0627-e76f27095b61
 # ╟─767b67be-3714-11eb-2a8b-e13213320300
 # ╟─586f547e-3714-11eb-0fa1-cf1a1ebd5f50
 # ╟─8fbbec74-f970-11ea-34d8-174a293a4107
