@@ -162,6 +162,31 @@ md"### Detrending"
 # ╔═╡ 586f547e-3714-11eb-0fa1-cf1a1ebd5f50
 md"#### $(@bind run_GPT_WLC CheckBox()) GPT WLC"
 
+# ╔═╡ fbaf9f98-3cb6-11eb-2689-05f6174fd509
+if run_GPT_WLC
+	data_GPT_WLC = CSV.File(
+		"./Projects/HATP26b/data_detrending/hp26_190313_c/white-light/PCA_3/detrended_lc.dat",
+		comment = "#",
+		header = ["Time", "DetFlux", "DetFluxErr", "Model"],
+	)
+end
+
+# ╔═╡ 72c7e8f4-3cc3-11eb-2f6a-07aff33cd8aa
+if run_GPT_WLC
+	let 
+		model = data_GPT_WLC.Model
+		data = data_GPT_WLC.DetFlux
+		resid = (data - model) * 1e6
+
+		p_data = scatter(data; label="data", yguide="Normalized flux")
+		p_model_and_data = plot!(p_data, model; label="model", lw=4)
+		p_resid = scatter(resid; label="residual", yguide="ppm")
+		
+		l = @layout [top; bottom{0.2h}]
+		plot(p_model_and_data, p_resid; layout=l, link=:x, legend=nothing)
+	end
+end
+
 # ╔═╡ 8fbbec74-f970-11ea-34d8-174a293a4107
 md"### Photmetric monitoring"
 
@@ -356,7 +381,9 @@ plotly()
 # ╟─dc2a31a2-3c1a-11eb-0627-e76f27095b61
 # ╟─07920dee-3c1e-11eb-2885-33fcf07a818f
 # ╟─767b67be-3714-11eb-2a8b-e13213320300
-# ╟─586f547e-3714-11eb-0fa1-cf1a1ebd5f50
+# ╠═586f547e-3714-11eb-0fa1-cf1a1ebd5f50
+# ╠═fbaf9f98-3cb6-11eb-2689-05f6174fd509
+# ╠═72c7e8f4-3cc3-11eb-2f6a-07aff33cd8aa
 # ╟─8fbbec74-f970-11ea-34d8-174a293a4107
 # ╟─4494f844-f98b-11ea-330d-e3c18965972d
 # ╟─b38c37b6-f970-11ea-033e-6d215c8b87df
