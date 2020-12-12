@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.16
+# v0.12.17
 
 using Markdown
 using InteractiveUtils
@@ -119,20 +119,18 @@ function plot_spectra!(p, data; key="Wavelength", label=nothing)
 		"Pixel sensitivity (obtained by the flat)" => 3,
 		"Simple extracted object spectrum/pixel sensitivity" => 4,
 		"Sky flag (0 = note uneven sky, 1 = probably uneven profile,
-			2 = Sky_Base failed)" => 5,
+		2 = Sky_Base failed)" => 5,
 		"Optimally extracted object spectrum" => 6,
 		"Optimally extracted object spectrum/pixel sensitivity" => 7,
 	)[key]
 	d = data[:, i+1, :]
 	extracted_spectra_med = median(d, dims=2)
 	σ = std(d, dims=2)
+	println(size(σ), size(extracted_spectra_med))
 	plot!(
 		p,
-		extracted_spectra_med, #./ maximum(extracted_spectra_med),
-		# ribbon=(
-		# 	σ / maximum(extracted_spectra_med),
-		# 	σ / maximum(extracted_spectra_med),
-		# ),
+		extracted_spectra_med,
+		ribbon = σ,
 		label = label,
 		legend = :topright,
 	)
@@ -140,7 +138,7 @@ end
 
 # ╔═╡ 9edfdb1e-fba4-11ea-2223-a5266f7ec2bb
 if init_extracted_spectra
-	p = plot()
+	p = plot(xguide="Index", yguide="Value")
 	for fpath in glob("$DATA_RED/ut190313_a15_25_noflat_LBR/*spec.fits")
 		FITS(fpath) do f
 			data = read(f[1])
@@ -157,10 +155,6 @@ md"#### $(@bind final_extracted_spectra CheckBox()) Final Extracted spectra"
 md"""
 From tepspec pickle
 """
-
-# ╔═╡ dc2a31a2-3c1a-11eb-0627-e76f27095b61
-if final_extracted_spectra
-end
 
 # ╔═╡ 767b67be-3714-11eb-2a8b-e13213320300
 md"### Detrending"
@@ -294,6 +288,38 @@ if trace
 	)
 end
 
+# ╔═╡ dc2a31a2-3c1a-11eb-0627-e76f27095b61
+if final_extracted_spectra
+	data_final_specs = load_pickle(
+		"$DATA_RED/ut190313_a15_25_noflat_LBR/LCs_hp26_bins.pkl"
+	)
+	final_specs = data_final_specs["optimal spectra"]
+end;
+
+# ╔═╡ 07920dee-3c1e-11eb-2885-33fcf07a818f
+if final_extracted_spectra
+	let
+		wav_final_spec = final_specs["wavelengths"]
+		p = plot()
+		for (k, v) in final_specs
+			if k != "wavelengths"
+				flux_final_spec = vec(mean(v, dims=1))
+				σ = vec(std(v, dims=1))
+				if !any(isnan, flux_final_spec)
+					plot!(
+						p,
+						wav_final_spec,
+						flux_final_spec,
+						ribbon = σ,
+						label = k,
+					)
+				end
+			end
+		end
+		p
+	end
+end
+
 # ╔═╡ 6319a232-f8a3-11ea-0a58-7bf7af34ff4d
 begin
 	theme(:dark)
@@ -319,15 +345,16 @@ plotly()
 # ╟─51666c34-39bd-11eb-0e2a-2371e207dce8
 # ╟─e7e183b0-fb4c-11ea-157d-c11e7dbb1a1c
 # ╟─d6251ef2-fb4c-11ea-1ce3-97a485de4b95
-# ╠═6d2b41fc-fb96-11ea-0ca4-1d62d94d25d7
+# ╟─6d2b41fc-fb96-11ea-0ca4-1d62d94d25d7
 # ╟─93b51aba-fba4-11ea-2181-a9f87f9348e4
 # ╟─61c9a1ea-3c1a-11eb-2623-ff87059cf057
-# ╟─6b0c5d92-3bf7-11eb-03eb-871c9ffbd2e8
+# ╠═6b0c5d92-3bf7-11eb-03eb-871c9ffbd2e8
 # ╟─9edfdb1e-fba4-11ea-2223-a5266f7ec2bb
 # ╟─25af8e98-fba8-11ea-2089-db810bb8778a
 # ╟─a8e8d9e2-3c1a-11eb-2bc3-bd1f05686d01
 # ╟─e6440db6-3c1a-11eb-14a4-81c7c7b23a80
-# ╠═dc2a31a2-3c1a-11eb-0627-e76f27095b61
+# ╟─dc2a31a2-3c1a-11eb-0627-e76f27095b61
+# ╟─07920dee-3c1e-11eb-2885-33fcf07a818f
 # ╟─767b67be-3714-11eb-2a8b-e13213320300
 # ╟─586f547e-3714-11eb-0fa1-cf1a1ebd5f50
 # ╟─8fbbec74-f970-11ea-34d8-174a293a4107
