@@ -17,21 +17,31 @@ end
 using PlutoUI, Plots, StatsPlots, CSV, CCDReduction, FITSIO, DataFrames, DataFramesMeta, Glob, AstroImages, HDF5, Dates, Printf, PyCall, RecursiveArrayTools, BenchmarkTools, Statistics, PaddedViews
 
 # ╔═╡ cea3f932-f935-11ea-0eb3-4f47e65da5fa
-md"## $(@bind run_file_stats CheckBox()) File stats"
+md"""
+## $(@bind run_file_stats CheckBox()) File stats
+
+Processes raw data in `DATA_DIR` and saves summary of header info to file
+"""
+
+# ╔═╡ 30a59602-3e46-11eb-083b-01049a15e927
+if run_file_stats
+	const DATA_DIR = "./Projects/HATP26b/data/ut190313"
+end
 
 # ╔═╡ 18536d9c-f922-11ea-02ed-5340b350c0c0
 if run_file_stats
 	let
+		# Load
 		df = fitscollection(
-			"../data",
+			DATA_DIR,
 			abspath=false,
 			exclude=fn"ift*[!c1].fits",
 			exclude_key=("COMMENT",)
 		)
 
-		# Save data
+		# Save
 		header_keys = [
-			"path",
+			"FILENAME",
 			"UT-DATE",
 			"UT-TIME",
 			"UT-END",
@@ -49,33 +59,48 @@ if run_file_stats
 			"SPEED",
 
 		]
-		# CSV.write(
-		# 	"$(project_path)/nightlog_$(basename(data_path)).csv",
-		# 	df[header_keys]
-		# )
-
-		# Plot a key
-		# key = "AIRMASS"
-		# plot(
-		# 	df_raw_data[key],
-		# 	label = "some data",
-		# 	linecolor = :cyan,
-		# 	#markershape = :square,
-		# 	markercolor = :cyan,
-		# 	legend = :none, #:bottomright,
-		# 	xlabel = "Index",
-		# 	ylabel = key,
-		# 	title = data_path,
-		# )
-		
-		df
+		csv_path = dirname(DATA_DIR)
+		date = basename(DATA_DIR)
+		CSV.write(
+			"$csv_path/logs/nightlog_$date.csv",
+			df[!, header_keys]
+		)
+	
+	# Preview
+	df
 	end
 end
 
-# ╔═╡ f802dde4-f92a-11ea-2bf6-bd8d80f69a3a
-if run_file_stats
-	#by(df_raw_data, :OBJECT, nrow)
-	HTMLTable(head(@where(df_raw_data, occursin.("science", :OBJECT))))
+# ╔═╡ 5b08e224-3e4c-11eb-358e-8532b35c3151
+md"""
+## $(@bind run_raw_data_plot CheckBox()) Raw data plot
+
+View summary data stored in `LOG_PATH`
+"""
+
+# ╔═╡ 4bf3a536-3e4e-11eb-394e-6326142d4746
+if run_raw_data_plot
+	const LOG_PATH = "./Projects/HATP26b/data/logs/nightlog_ut190313.csv"
+end
+
+# ╔═╡ d9d441d8-3e48-11eb-3dda-f334426e5b80
+if run_raw_data_plot
+	let
+		key = :AIRMASS
+		df = CSV.read(LOG_PATH, DataFrame)
+		#df = @where(df, occursin.("sci", :OBJECT))
+		plot(
+			df[!, key],
+			label = "some data",
+			linecolor = :cyan,
+			#markershape = :square,
+			markercolor = :cyan,
+			legend = :none, #:bottomright,
+			xlabel = "Index",
+			ylabel = key,
+			#title = data_path,
+		)
+	end
 end
 
 # ╔═╡ 0110f78a-f945-11ea-004c-291cbfd9365c
@@ -353,10 +378,13 @@ end
 plotly()
 
 # ╔═╡ Cell order:
-# ╠═cea3f932-f935-11ea-0eb3-4f47e65da5fa
-# ╠═18536d9c-f922-11ea-02ed-5340b350c0c0
-# ╠═f802dde4-f92a-11ea-2bf6-bd8d80f69a3a
-# ╠═0110f78a-f945-11ea-004c-291cbfd9365c
+# ╟─cea3f932-f935-11ea-0eb3-4f47e65da5fa
+# ╠═30a59602-3e46-11eb-083b-01049a15e927
+# ╟─18536d9c-f922-11ea-02ed-5340b350c0c0
+# ╟─5b08e224-3e4c-11eb-358e-8532b35c3151
+# ╠═4bf3a536-3e4e-11eb-394e-6326142d4746
+# ╟─d9d441d8-3e48-11eb-3dda-f334426e5b80
+# ╟─0110f78a-f945-11ea-004c-291cbfd9365c
 # ╠═ac13cca4-3e35-11eb-083b-cba8e8b46c07
 # ╠═65530184-f968-11ea-3f55-7d8a470384ed
 # ╠═6f8188e8-f98f-11ea-0bd4-bd30f24b976e
