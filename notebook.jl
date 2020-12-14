@@ -36,7 +36,7 @@ if run_file_stats
 			DATA_DIR,
 			abspath=false,
 			exclude=fn"ift*[!c1].fits",
-			exclude_key=("COMMENT",)
+			exclude_key=("COMMENT"),
 		)
 
 		# Save
@@ -65,9 +65,9 @@ if run_file_stats
 			"$csv_path/logs/nightlog_$date.csv",
 			df[!, header_keys]
 		)
-	
-	# Preview
-	df
+
+		# Preview
+		df
 	end
 end
 
@@ -104,16 +104,22 @@ if run_raw_data_plot
 end
 
 # ╔═╡ 0110f78a-f945-11ea-004c-291cbfd9365c
-md"## $(@bind run_tepspec CheckBox()) `tepspec` exploration"
+md"""
+## $(@bind run_tepspec CheckBox()) `tepspec` exploration
+
+Plot divided LCs and chip traces from `tepspec` pickle stored under `RED_DIR`
+"""
 
 # ╔═╡ ac13cca4-3e35-11eb-083b-cba8e8b46c07
-const DATA_RED = "./Projects/HATP26b/data_reductions"
+begin
+	const TEP_PKL = "./Projects/HATP26b/data_reductions/ut190313_a15_25_noflat_LBR/LCs_hp26_bins_r.pkl"
+	const DATA_RED = dirname(TEP_PKL)
+end
 
 # ╔═╡ 93b51aba-fba4-11ea-2181-a9f87f9348e4
-md"#### $(@bind init_extracted_spectra CheckBox()) Intitial Extracted spectra"
-
-# ╔═╡ 61c9a1ea-3c1a-11eb-2623-ff87059cf057
 md"""
+### $(@bind init_extracted_spectra CheckBox()) Intitial Extracted spectra
+
 From spec.fits files
 """
 
@@ -157,47 +163,52 @@ end
 
 # ╔═╡ 9edfdb1e-fba4-11ea-2223-a5266f7ec2bb
 if init_extracted_spectra
-	p = plot(xguide="Index", yguide="Value")
-	for fpath in glob("$DATA_RED/ut190313_a15_25_noflat_LBR/*spec.fits")
-		FITS(fpath) do f
-			data = read(f[1])
-			plot_spectra!(p, data, label=basename(fpath), key=extr_spec_key)
-		end
-	end	
-	p
+	let
+		p = plot(xguide="Index", yguide="Value")
+		for fpath in glob("$DATA_RED/*spec.fits")
+			FITS(fpath) do f
+				data = read(f[1])
+				plot_spectra!(p, data, label=basename(fpath), key=extr_spec_key)
+			end
+		end	
+		p
+	end
 end
 
 # ╔═╡ a8e8d9e2-3c1a-11eb-2bc3-bd1f05686d01
-md"#### $(@bind final_extracted_spectra CheckBox()) Final Extracted spectra"
-
-# ╔═╡ e6440db6-3c1a-11eb-14a4-81c7c7b23a80
 md"""
-From tepspec pickle
+### $(@bind final_extracted_spectra CheckBox()) Final Extracted spectra
+
+Loaded from tepspec pickle
 """
 
 # ╔═╡ 767b67be-3714-11eb-2a8b-e13213320300
-md"### Detrending"
+md"## Detrending"
+
+# ╔═╡ bcda6c82-3e53-11eb-34f6-81e71a34a293
+const GPT_DET_WLC = "./Projects/HATP26b/data_detrending/out_r/HATP26/hp26_190313_r/white-light/PCA_2/detrended_lc.dat"
 
 # ╔═╡ 586f547e-3714-11eb-0fa1-cf1a1ebd5f50
-md"#### $(@bind run_GPT_WLC CheckBox()) GPT WLC"
+md"""### $(@bind run_GPT_WLC CheckBox()) GPT WLC
 
-# ╔═╡ fbaf9f98-3cb6-11eb-2689-05f6174fd509
-if run_GPT_WLC
-	data_GPT_WLC = CSV.File(
-		"./Projects/HATP26b/data_detrending/hp26_190313_c/white-light/PCA_3/detrended_lc.dat",
-		comment = "#",
-		header = ["Time", "DetFlux", "DetFluxErr", "Model"],
-	)
-end
+Visualize GPT data stored in `GPT_DET_WLC`
+"""
 
 # ╔═╡ 72c7e8f4-3cc3-11eb-2f6a-07aff33cd8aa
 if run_GPT_WLC
 	let 
-		model = data_GPT_WLC.Model
-		data = data_GPT_WLC.DetFlux
-		resid = (data - model) * 1e6
+		data = CSV.read(
+			GPT_DET_WLC,
+			DataFrame;
+			comment = "#",
+			header = ["Time", "DetFlux", "DetFluxErr", "Model"],
+		)
+		
+		model = data.Model
+		flux = data.DetFlux
+		resid = (flux - model) * 1e6
 
-		p_data = scatter(data; label="data", yguide="Normalized flux")
+		p_data = scatter(flux; label="data", yguide="Normalized flux")
 		p_model_and_data = plot!(p_data, model; label="model", lw=4)
 		p_resid = scatter(resid; label="residual", yguide="ppm")
 		
@@ -205,6 +216,12 @@ if run_GPT_WLC
 		plot(p_model_and_data, p_resid; layout=l, link=:x, legend=nothing)
 	end
 end
+
+# ╔═╡ c86f045e-3e56-11eb-191d-f76a1850b700
+params = ["P", "aRs", "b"]
+
+# ╔═╡ 968d4746-3e57-11eb-2811-7942a3f1bbb8
+# @df df_GPT corrplot([:P :b :aRs :b])
 
 # ╔═╡ 8fbbec74-f970-11ea-34d8-174a293a4107
 md"### Photmetric monitoring"
@@ -271,9 +288,7 @@ end
 
 # ╔═╡ 65530184-f968-11ea-3f55-7d8a470384ed
 if run_tepspec
-	data = load_pickle(
-		"$DATA_RED/ut190313_a15_25_noflat_LBR/LCs_hp26_bins.pkl"
-	)
+	data = load_pickle(TEP_PKL)
 	flux_target = data["oLC"]
 	flux_comps = data["cLC"]
 	cNames = data["cNames"]
@@ -308,8 +323,8 @@ end
 
 # ╔═╡ d6251ef2-fb4c-11ea-1ce3-97a485de4b95
 if run_tepspec
-	XX = load_pickle("$DATA_RED/ut190313_a15_25_noflat_LBR/XX.pkl")
-    YY = load_pickle("$DATA_RED/ut190313_a15_25_noflat_LBR/YY.pkl")
+	XX = load_pickle("$DATA_RED/XX.pkl")
+    YY = load_pickle("$DATA_RED/YY.pkl")
 	
 	md"""
 	**Number of traces to show for:**
@@ -332,17 +347,11 @@ if run_tepspec
 	)
 end
 
-# ╔═╡ dc2a31a2-3c1a-11eb-0627-e76f27095b61
-if final_extracted_spectra
-	data_final_specs = load_pickle(
-		"$DATA_RED/ut190313_a15_25_noflat_LBR/LCs_hp26_bins.pkl"
-	)
-	final_specs = data_final_specs["optimal spectra"]
-end;
-
 # ╔═╡ 07920dee-3c1e-11eb-2885-33fcf07a818f
 if final_extracted_spectra
 	let
+		data = load_pickle(TEP_PKL)
+		final_specs = data["optimal spectra"]
 		wav_final_spec = final_specs["wavelengths"]
 		p = plot()
 		for (k, v) in final_specs
@@ -363,6 +372,12 @@ if final_extracted_spectra
 		p
 	end
 end
+
+# ╔═╡ 03b4f076-3e56-11eb-133c-393802c43eb4
+corner_pkl = load_pickle("./Projects/HATP26b/data_detrending/out_r/HATP26/hp26_190313_r/white-light/BMA_posteriors.pkl");
+
+# ╔═╡ f3ad356e-3e56-11eb-0346-7f6399dc50bf
+df_GPT = DataFrame(corner_pkl)[!, params]
 
 # ╔═╡ 6319a232-f8a3-11ea-0a58-7bf7af34ff4d
 begin
@@ -386,24 +401,25 @@ plotly()
 # ╟─d9d441d8-3e48-11eb-3dda-f334426e5b80
 # ╟─0110f78a-f945-11ea-004c-291cbfd9365c
 # ╠═ac13cca4-3e35-11eb-083b-cba8e8b46c07
-# ╠═65530184-f968-11ea-3f55-7d8a470384ed
-# ╠═6f8188e8-f98f-11ea-0bd4-bd30f24b976e
-# ╠═51666c34-39bd-11eb-0e2a-2371e207dce8
-# ╠═d6251ef2-fb4c-11ea-1ce3-97a485de4b95
+# ╟─65530184-f968-11ea-3f55-7d8a470384ed
+# ╟─6f8188e8-f98f-11ea-0bd4-bd30f24b976e
+# ╟─51666c34-39bd-11eb-0e2a-2371e207dce8
+# ╟─d6251ef2-fb4c-11ea-1ce3-97a485de4b95
 # ╠═6d2b41fc-fb96-11ea-0ca4-1d62d94d25d7
 # ╟─93b51aba-fba4-11ea-2181-a9f87f9348e4
-# ╟─61c9a1ea-3c1a-11eb-2623-ff87059cf057
 # ╟─6b0c5d92-3bf7-11eb-03eb-871c9ffbd2e8
-# ╠═9edfdb1e-fba4-11ea-2223-a5266f7ec2bb
+# ╟─9edfdb1e-fba4-11ea-2223-a5266f7ec2bb
 # ╟─25af8e98-fba8-11ea-2089-db810bb8778a
 # ╟─a8e8d9e2-3c1a-11eb-2bc3-bd1f05686d01
-# ╟─e6440db6-3c1a-11eb-14a4-81c7c7b23a80
-# ╠═dc2a31a2-3c1a-11eb-0627-e76f27095b61
-# ╠═07920dee-3c1e-11eb-2885-33fcf07a818f
+# ╟─07920dee-3c1e-11eb-2885-33fcf07a818f
 # ╟─767b67be-3714-11eb-2a8b-e13213320300
-# ╠═586f547e-3714-11eb-0fa1-cf1a1ebd5f50
-# ╠═fbaf9f98-3cb6-11eb-2689-05f6174fd509
-# ╠═72c7e8f4-3cc3-11eb-2f6a-07aff33cd8aa
+# ╠═bcda6c82-3e53-11eb-34f6-81e71a34a293
+# ╟─586f547e-3714-11eb-0fa1-cf1a1ebd5f50
+# ╟─72c7e8f4-3cc3-11eb-2f6a-07aff33cd8aa
+# ╠═03b4f076-3e56-11eb-133c-393802c43eb4
+# ╠═c86f045e-3e56-11eb-191d-f76a1850b700
+# ╠═f3ad356e-3e56-11eb-0346-7f6399dc50bf
+# ╠═968d4746-3e57-11eb-2811-7942a3f1bbb8
 # ╟─8fbbec74-f970-11ea-34d8-174a293a4107
 # ╟─4494f844-f98b-11ea-330d-e3c18965972d
 # ╠═b38c37b6-f970-11ea-033e-6d215c8b87df
@@ -411,5 +427,5 @@ plotly()
 # ╟─03cd4060-fab6-11ea-1298-ebbeccac9d09
 # ╟─7b2ef6f4-f9e3-11ea-22ed-0367935634be
 # ╟─6319a232-f8a3-11ea-0a58-7bf7af34ff4d
-# ╟─1497392c-f96d-11ea-3e29-15d8b60f4559
+# ╠═1497392c-f96d-11ea-3e29-15d8b60f4559
 # ╠═de8e285c-f93c-11ea-1571-a5a5dbc48e3c
