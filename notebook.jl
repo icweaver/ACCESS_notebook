@@ -21,52 +21,55 @@ md"## $(@bind run_file_stats CheckBox()) File stats"
 
 # ╔═╡ 18536d9c-f922-11ea-02ed-5340b350c0c0
 if run_file_stats
-	df_raw_data = CCDReduction.fitscollection(
-		data_path,
-		abspath=false,
-		exclude=fn"ift*[!c1].fits",
-		exclude_key=("COMMENT",)
-	)
-	
-	# Save data
-	header_keys = [
-		"path",
-		"UT-DATE",
-		"UT-TIME",
-		"UT-END",
-		"EXPTIME",
-		"OBJECT",
-		"EXPTYPE",
-		"RA",
-		"DEC",
-		"SLITMASK",
-		"FILTER",
-		"DISPERSR",
-		"AIRMASS",
-		"G-SEEING",
-		"BINNING",
-		"SPEED",
+	let
+		df = fitscollection(
+			"../data",
+			abspath=false,
+			exclude=fn"ift*[!c1].fits",
+			exclude_key=("COMMENT",)
+		)
 
-	]
-	CSV.write(
-		"$(project_path)/nightlog_$(basename(data_path)).csv",
-		df_raw_data[header_keys]
-	)
-	
-	# Plot a key
-	key = "AIRMASS"
-	plot(
-		df_raw_data[key],
-		label = "some data",
-		linecolor = :cyan,
-		#markershape = :square,
-		markercolor = :cyan,
-		legend = :none, #:bottomright,
-		xlabel = "Index",
-		ylabel = key,
-		title = data_path,
-	)
+		# Save data
+		header_keys = [
+			"path",
+			"UT-DATE",
+			"UT-TIME",
+			"UT-END",
+			"EXPTIME",
+			"OBJECT",
+			"EXPTYPE",
+			"RA",
+			"DEC",
+			"SLITMASK",
+			"FILTER",
+			"DISPERSR",
+			"AIRMASS",
+			"G-SEEING",
+			"BINNING",
+			"SPEED",
 
+		]
+		# CSV.write(
+		# 	"$(project_path)/nightlog_$(basename(data_path)).csv",
+		# 	df[header_keys]
+		# )
+
+		# Plot a key
+		# key = "AIRMASS"
+		# plot(
+		# 	df_raw_data[key],
+		# 	label = "some data",
+		# 	linecolor = :cyan,
+		# 	#markershape = :square,
+		# 	markercolor = :cyan,
+		# 	legend = :none, #:bottomright,
+		# 	xlabel = "Index",
+		# 	ylabel = key,
+		# 	title = data_path,
+		# )
+		
+		df
+	end
 end
 
 # ╔═╡ f802dde4-f92a-11ea-2bf6-bd8d80f69a3a
@@ -78,11 +81,8 @@ end
 # ╔═╡ 0110f78a-f945-11ea-004c-291cbfd9365c
 md"## $(@bind run_tepspec CheckBox()) `tepspec` exploration"
 
-# ╔═╡ 362246e4-3a44-11eb-14b3-13a687b7f39b
+# ╔═╡ ac13cca4-3e35-11eb-083b-cba8e8b46c07
 const DATA_RED = "./Projects/HATP26b/data_reductions"
-
-# ╔═╡ e7e183b0-fb4c-11ea-157d-c11e7dbb1a1c
-md"#### $(@bind trace CheckBox()) Trace"
 
 # ╔═╡ 93b51aba-fba4-11ea-2181-a9f87f9348e4
 md"#### $(@bind init_extracted_spectra CheckBox()) Intitial Extracted spectra"
@@ -282,7 +282,7 @@ if run_tepspec
 end
 
 # ╔═╡ d6251ef2-fb4c-11ea-1ce3-97a485de4b95
-if trace
+if run_tepspec
 	XX = load_pickle("$DATA_RED/ut190313_a15_25_noflat_LBR/XX.pkl")
     YY = load_pickle("$DATA_RED/ut190313_a15_25_noflat_LBR/YY.pkl")
 	
@@ -294,7 +294,7 @@ if trace
 end
 
 # ╔═╡ 6d2b41fc-fb96-11ea-0ca4-1d62d94d25d7
-if trace	
+if run_tepspec	
 	trace_idxs = round.(Int, range(1, length(XX[trace_key]), length=num_traces))
 	plot(
 		XX[trace_key][trace_idxs],
@@ -356,12 +356,11 @@ plotly()
 # ╠═cea3f932-f935-11ea-0eb3-4f47e65da5fa
 # ╠═18536d9c-f922-11ea-02ed-5340b350c0c0
 # ╠═f802dde4-f92a-11ea-2bf6-bd8d80f69a3a
-# ╟─0110f78a-f945-11ea-004c-291cbfd9365c
-# ╠═362246e4-3a44-11eb-14b3-13a687b7f39b
+# ╠═0110f78a-f945-11ea-004c-291cbfd9365c
+# ╠═ac13cca4-3e35-11eb-083b-cba8e8b46c07
 # ╠═65530184-f968-11ea-3f55-7d8a470384ed
-# ╟─6f8188e8-f98f-11ea-0bd4-bd30f24b976e
-# ╟─51666c34-39bd-11eb-0e2a-2371e207dce8
-# ╠═e7e183b0-fb4c-11ea-157d-c11e7dbb1a1c
+# ╠═6f8188e8-f98f-11ea-0bd4-bd30f24b976e
+# ╠═51666c34-39bd-11eb-0e2a-2371e207dce8
 # ╠═d6251ef2-fb4c-11ea-1ce3-97a485de4b95
 # ╠═6d2b41fc-fb96-11ea-0ca4-1d62d94d25d7
 # ╟─93b51aba-fba4-11ea-2181-a9f87f9348e4
