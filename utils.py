@@ -61,6 +61,16 @@ def fits_header(fpath):
     with open(fpath, 'rb') as f:
         header = fits.open(f)[0].header
         return header
+def write_latex_row(row):
+    v, vu, vd = row
+    return f'{v:.3f}^{{+{vu:.3f}}}_{{-{vd:.3f}}}'
+def write_latex_wav(row):
+    wav_d, wav_u = row
+    return f'{wav_d:.1f} - {wav_u:.1f}'
+
+def write_latex_single(row):
+    v, v_unc = row
+    return f'{v:.3f} \pm {v_unc:.3f}'
 
 def write_latex(p=None, df=None, v=None, vu=None, vd=None):
     if v is not None:
