@@ -1535,20 +1535,22 @@ def get_wlc_and_tspec_data(data_paths_glob, offset=True):
 
     # Hold WLC (depth, depth_u, depth_d) in each row
     Ntransits = len(data_path_dict)
-    wlc_data = np.zeros((Ntransits, 3))
+    wlc_data = np.empty((Ntransits, 3))
 
     # Hold tspec + binned unc for each night
-    Nbins = max(
-        (
-            len(glob.glob(f"{transit_path}/wavelength/wbin*"))
-            for transit_path in data_path_dict.values()
-        )
-    )
-    wavs_data = np.zeros((Ntransits, Nbins))
-    tspec_data = np.zeros((Ntransits, Nbins, 3))
+    Nbins = len(glob.glob(f"{data_path_dict['Transit 1']}/wavelength/wbin*"))
+    wavs_data = np.empty((Ntransits, Nbins))
+    tspec_data = np.empty((Ntransits, Nbins, 3))
+
+    # TODO: generalize to different number of bins per night?
+    #Nbins = max(
+    #    (
+    #        len(glob.glob(f"{transit_path}/wavelength/wbin*"))
+    #        for transit_path in data_path_dict.values()
+    #    )
+    #)
 
     for i, (transit_name, transit_path) in enumerate(data_path_dict.items()):
-
         # Load tspec data
         df_tspec = pd.read_csv(f"{transit_path}/transpec.csv")
 
@@ -1569,27 +1571,117 @@ def get_wlc_and_tspec_data(data_paths_glob, offset=True):
                 ["Depth (ppm)", "Depthup (ppm)", "DepthDown (ppm)"]
         ].to_numpy()
 
+    #########
     # Combine
-    mean_wlc_depth, mean_wlc_unc = weighted_mean_uneven_errors(
+    #########
+    wlc_mean, wlc_unc = weighted_mean_uneven_errors(
         *wlc_data.T
     )
     if offset:
-        wlc_offsets = wlc_data[:, 0] - mean_wlc_depth
+        wlc_offsets = wlc_data[:, 0] - wlc_mean
         tspec_data[:, :, 0] -= wlc_offsets.reshape((Ntransits, 1))
     else:
         wlc_offsets = 0.0
 
-    return wavs_data, tspec_data, wlc_data, wlc_offsets
+    tspec_mean, tspec_unc = [], []
+    for i in range(Nbins):
+        tspec_mean_w, tspec_unc_w = weighted_mean_uneven_errors(
+                *tspec_data[:, i, :].T
+        )
+        tspec_mean.append(tspec_mean_w)
+        tspec_unc.append(tspec_unc_w)
 
-def plot_tspec(ax, data_paths_glob, offset=True):
-    wavs_data, tspec_data, wlc_data, wlc_offsets = get_wlc_and_tspec_data(
-            data_paths_glob
+    tspec_mean = np.array(tspec_mean)
+    tspec_unc = np.array(tspec_unc)
+
+    return (
+        wavs_data,
+        tspec_data,
+        tspec_mean,
+        tspec_unc,
+        wlc_data,
+        wlc_offsets,
     )
+
+def plot_tspec(ax, data_paths_glob, offset=True, combine=True):
+    (
+        wavs_data,
+        tspec_data,
+        tspec_mean,
+        tspec_unc,
+        wlc_data,
+        wlc_offsets
+    ) = get_wlc_and_tspec_data(data_paths_glob)
+
+    # Individual tspecs
     for i, (wavs_i, tspec_i) in enumerate(zip(wavs_data, tspec_data)):
         ax.errorbar(
-                wavs_i,
-                tspec_i[:, 0],
-                yerr=tspec_i[:, 1],
-                fmt = 'o',
+            wavs_i,
+            tspec_i[:, 0],
+            yerr=tspec_i[:, 1],
+            fmt = 'o',
         )
+
+    # Combined
+    if combine:
+        ax.errorbar(
+            wavs_i,
+            tspec_mean,
+            yerr=tspec_unc,
+            c='w',
+            mec='k',
+            fmt='o',
+            zorder=10,
+            label="combined",
+            ecolor='k',
+            lw=4,
+      )
+
+    return ax, tspec_data, wlc_data
+
+def get_binned_BMA_quantities(data_paths_glob, BMA_key="max_var"):
+    # Expand data paths
+    data_paths = sorted(glob.glob(data_paths_glob))
+
+    # Assign a transit number to each
+    data_path_dict = {
+        f"Transit {i}":data_path
+        for (i, data_path) in enumerate(data_paths, start=1)
+    }
+
+    Ntransits = len(data_path_dict)
+    path0 = data_path_dict['Transit 1']
+    Nbins = len(glob.glob(f"{path0}/wavelength/wbin*"))
+    binned_data = np.empty((Ntransits, Nbins, 3))
+
+    # Load tspec data
+    df_tspec = pd.read_csv(f"{path0}/transpec.csv")
+    # Wavelengths
+    wavs = df_tspec[["Wav_d", "Wav_u"]].mean(axis=1).values
+
+    for i, (transit_name, transit_path) in enumerate(data_path_dict.items()):
+        for n in range(Nbins):
+            df_result = pd.read_table(
+                f"{transit_path}/wavelength/wbin{n}/results.dat",
+                sep='\s+',
+                escapechar='#',
+                index_col=" Variable",
+            )
+            binned_data[i, n :] = df_result.loc[BMA_key]
+
+    return wavs, binned_data
+
+def plot_binned_BMA(ax, data_paths_glob, BMA_key="max_var"):
+    wavs, binned_data = get_binned_BMA_quantities(data_paths_glob)
+
+    for i, binned_data_i in enumerate(binned_data, start=1):
+        ax.errorbar(
+            wavs,
+            binned_data_i[:, 0] * 1e6,
+            yerr=binned_data_i[:, [2, 1]].T * 1e6,
+            fmt='--o',
+            label=f"Transit {i}",
+        )
+        ax.legend()
+
     return ax
