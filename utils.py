@@ -19,6 +19,7 @@ import batman
 import matplotlib.patheffects as PathEffects
 import sys
 import re
+import george
 
 from astropy.io import fits, ascii
 from astropy.time import Time
@@ -262,7 +263,7 @@ def plot_chips(dirpath, fpathame, vmin=0, vmax=2_000, spec_ap=0, sky_ap=0):
             self.x = self.x.astype(np.float)
             self.y = self.y.astype(np.float)
 
-    target = dirpath.split('/')[1]
+    target = dirpath.split('/')[7]
     coords_file = f"{dirpath}/{target}.coords"
     coords = CoordinateData(coords_file)
 
@@ -627,16 +628,16 @@ def _plot_spec_file(ax, fpath=None, data=None, wavs=None, i=1, label=None,
     specs_med = np.nanmedian(specs, axis=0)
     specs_std = np.nanstd(specs, axis=0)
     factor = np.nanmedian(specs_med)
-    specs_med /= factor
-    specs_std /= factor
+    specs_med #/= factor
+    specs_std #/= factor
 
 
     # empty plot for custom legend
     p = ax.plot([], '-o', label=label, **median_kwargs)
 
     # plot normalized median and 1-sigma region
-    specs_med /= np.nanmax(specs_med)
-    specs_std /= np.nanmax(specs_med)
+    specs_med #/= np.nanmax(specs_med)
+    specs_std #/= np.nanmax(specs_med)
     c = p[0].get_color()
     ax.fill_between(wavs, specs_med - specs_std, specs_med + specs_std, color=c, alpha=0.25, lw=0)
     ax.plot(wavs, specs_med, lw=2, color=c)
@@ -1285,21 +1286,23 @@ def plot_fluxes(
     oot=False,
     idx_oot=None,
     use_time=True,
+    t0=0,
 ):
     targ_flux = data["oLC"]
     comp_fluxes = data["cLC"]
     cNames = data["cNames"]
+    exptime = data["etimes"]
 
     if use_time:
-        time = data["t"] - 2.457e6
+        time = (data["t"] - t0) * 24.0
     else:
         time = range(len(targ_flux))
 
 
     if normalize:
         #comp_fluxes = comp_fluxes / np.max(targ_flux)
-        comp_fluxes = comp_fluxes / np.max(comp_fluxes, axis=0)
-        targ_flux = targ_flux / np.max(targ_flux)
+        comp_fluxes = comp_fluxes / np.median(comp_fluxes, axis=0)
+        targ_flux = targ_flux / np.median(targ_flux)
 
     if oot:
         targ_flux = targ_flux[idx_oot]
@@ -1307,6 +1310,8 @@ def plot_fluxes(
         time = time[idx_oot]
 
     # Plot
+    targ_flux /= exptime
+    comp_fluxes = comp_fluxes / exptime[:, None]
     ax.plot(time, targ_flux, '.', label="target")
     for cName, comp in zip(cNames, comp_fluxes.T):
         if "7" not in cName:
@@ -1319,7 +1324,6 @@ def plot_fluxes(
         "cNames":cNames,
     }
 
-    print(cNames)
     ax.legend(fontsize=12)
     return ax, plot_data
 
@@ -1358,3 +1362,234 @@ def plot_inset(
     axins.set_xlim(lims)
     #axins.set_ylim(ax.get_ylim())
     ax.indicate_inset_zoom(axins, alpha=1.0, edgecolor='k')
+
+def detrend_BMA_WLC(
+    out_folder,
+    ld_law="linear",
+    eccmean=0.0,
+    omegamean=90.0,
+    pl=0.0,
+    pu=1.0,
+    JITTER=(200.0 * 1e-6)**2.0,
+):
+    # File paths
+    lc_path = f"{out_folder}/lc.dat"
+    BMA_path = f"{out_folder}/results.dat"
+    comps_path = f"{out_folder}/comps.dat"
+    eparams_path = f"{out_folder}/../eparams.dat"
+
+    # Raw data
+    tall, fall, f_index = np.genfromtxt(lc_path, unpack=True)
+    idx = np.where(f_index == 0)[0]
+    t, f = tall[idx], fall[idx]
+
+    # External params
+    data = np.genfromtxt(eparams_path)
+    X = (data - np.mean(data, axis=0)) / np.std(data, axis=0)
+
+    # Comp stars
+    data = np.genfromtxt(comps_path)
+    Xc = (data - np.mean(data, axis=0)) / np.std(data, axis=0)
+    if len(Xc.shape) != 1:
+        eigenvectors, eigenvalues, PC = classic_PCA(Xc.T)
+        Xc = PC.T
+    else:
+        Xc = Xc[:, None]
+
+    ########################
+    # BMA transit model vals
+    ########################
+    BMA = pd.read_table(
+        BMA_path,
+        escapechar='#',
+        sep="\s+",
+        index_col=" Variable",
+    )
+
+    mmeani, t0, P, r1, r2, q1 = (
+        BMA.at["mmean", "Value"],
+        BMA.at["t0", "Value"],
+        BMA.at["P", "Value"],
+        BMA.at["r1", "Value"],
+        BMA.at["r2", "Value"],
+        BMA.at["q1", "Value"],
+    )
+
+    if "rho" in BMA.columns:
+        rhos = BMA.at["rho", "Value"]
+        aR = ((rhos * G * ((P * 24.0 * 3600.0) ** 2)) / (3.0 * np.pi)) ** (
+            1.0 / 3.0
+        )
+    else:
+        aR = BMA.at["aR", "Value"]
+
+    Ar = (pu - pl) / (2.0 + pl + pu)
+    if r1 > Ar:
+        b, p = (
+            (1 + pl) * (1.0 + (r1 - 1.0) / (1.0 - Ar)),
+            (1 - r2) * pl + r2 * pu,
+        )
+    else:
+        b, p = (
+            (1.0 + pl) + np.sqrt(r1 / Ar) * r2 * (pu - pl),
+            pu + (pl - pu) * np.sqrt(r1 / Ar) * (1.0 - r2),
+        )
+
+    ecc = eccmean
+    omega = omegamean
+    ecc_factor = (1.0 + ecc * np.sin(omega * np.pi / 180.0)) / (
+        1.0 - ecc ** 2
+    )
+    inc_inv_factor = (b / aR) * ecc_factor
+    inc = np.arccos(inc_inv_factor) * 180.0 / np.pi
+
+    # Comp star model
+    mmean = BMA.at["mmean", "Value"]
+    xcs = [xci for xci in BMA.index if "xc" in xci]
+    xc = np.array([BMA.at[f"{xci}", "Value"] for xci in xcs])
+    comp_model = mmean + np.dot(Xc[idx, :], xc)
+
+    ###############
+    # Transit model
+    ###############
+    params, m = init_batman(t, law=ld_law)
+
+    if ld_law != "linear":
+        q2 = BMA.at["posterior_samples"]["q2", "Value"]
+        coeff1, coeff2 = reverse_ld_coeffs(ld_law, q1, q2)
+        params.u = [coeff1, coeff2]
+    else:
+        params.u = [q1]
+
+    params.t0 = t0
+    params.per = P
+    params.rp = p
+    params.a = aR
+    params.inc = inc
+    params.ecc = ecc
+    params.w = omega
+
+    lcmodel = m.light_curve(params)
+    model = -2.51 * np.log10(lcmodel)
+
+    #####
+    # GP
+    ####
+    kernel = np.var(f) * george.kernels.Matern32Kernel(
+        np.ones(X[idx, :].shape[1]),
+        ndim=X[idx, :].shape[1],
+        axes=list(range(X[idx, :].shape[1])),
+    )
+
+    jitter = george.modeling.ConstantModel(np.log(JITTER))
+    ljitter = np.log(BMA.at["jitter", "Value"]**2)
+    max_var = BMA.at["max_var", "Value"]
+    alpha_names = [k for k in BMA.index if "alpha" in k]
+    alphas = np.array([BMA.at[alpha, "Value"] for alpha in alpha_names])
+
+    gp = george.GP(
+        kernel,
+        mean=0.0,
+        fit_mean=False,
+        white_noise=jitter,
+        fit_white_noise=True,
+    )
+    gp.compute(X[idx, :])
+    gp_vector = np.r_[ljitter, np.log(max_var), np.log(1.0 / alphas)]
+    gp.set_parameter_vector(gp_vector)
+
+    #############
+    # Detrending
+    ############
+    residuals = f - (model + comp_model)
+    pred_mean, pred_var = gp.predict(residuals, X, return_var=True)
+
+    detrended_lc = f - (comp_model + pred_mean)
+
+    LC_det = 10**(-detrended_lc/2.51)
+    LC_det_err = np.sqrt(np.exp(ljitter))
+    LC_transit_model = lcmodel
+    LC_systematics_model = comp_model + pred_mean
+
+    return {
+       "LC_det":LC_det,
+       "LC_det_err":LC_det_err,
+       "LC_transit_model":LC_transit_model,
+       "LC_systematics_model":LC_systematics_model,
+       "comp_model":comp_model,
+       "pred_mean":pred_mean,
+       "t":t,
+       "t0":t0,
+       "P":P,
+   }
+
+def get_wlc_and_tspec_data(data_paths_glob, offset=True):
+    # Expand data paths
+    data_paths = sorted(glob.glob(data_paths_glob))
+
+    # Assign a transit number to each
+    data_path_dict = {
+        f"Transit {i}":data_path
+        for (i, data_path) in enumerate(data_paths, start=1)
+    }
+
+    # Hold WLC (depth, depth_u, depth_d) in each row
+    Ntransits = len(data_path_dict)
+    wlc_data = np.zeros((Ntransits, 3))
+
+    # Hold tspec + binned unc for each night
+    Nbins = max(
+        (
+            len(glob.glob(f"{transit_path}/wavelength/wbin*"))
+            for transit_path in data_path_dict.values()
+        )
+    )
+    wavs_data = np.zeros((Ntransits, Nbins))
+    tspec_data = np.zeros((Ntransits, Nbins, 3))
+
+    for i, (transit_name, transit_path) in enumerate(data_path_dict.items()):
+
+        # Load tspec data
+        df_tspec = pd.read_csv(f"{transit_path}/transpec.csv")
+
+        # Wavelengths
+        wavs = df_tspec[["Wav_d", "Wav_u"]].mean(axis=1).values
+
+        # WLC
+        df_wlc = pd.read_table(
+            f"{transit_path}/white-light/results.dat",
+            sep='\s+',
+            escapechar='#',
+            index_col=" Variable",
+        )
+
+        wlc_data[i, :] = df_wlc.loc["p"]**2 * 1e6
+        wavs_data[i, 0:len(df_tspec)] = wavs
+        tspec_data[i, 0:len(df_tspec), :] = df_tspec[
+                ["Depth (ppm)", "Depthup (ppm)", "DepthDown (ppm)"]
+        ].to_numpy()
+
+    # Combine
+    mean_wlc_depth, mean_wlc_unc = weighted_mean_uneven_errors(
+        *wlc_data.T
+    )
+    if offset:
+        wlc_offsets = wlc_data[:, 0] - mean_wlc_depth
+        tspec_data[:, :, 0] -= wlc_offsets.reshape((Ntransits, 1))
+    else:
+        wlc_offsets = 0.0
+
+    return wavs_data, tspec_data, wlc_data, wlc_offsets
+
+def plot_tspec(ax, data_paths_glob, offset=True):
+    wavs_data, tspec_data, wlc_data, wlc_offsets = get_wlc_and_tspec_data(
+            data_paths_glob
+    )
+    for i, (wavs_i, tspec_i) in enumerate(zip(wavs_data, tspec_data)):
+        ax.errorbar(
+                wavs_i,
+                tspec_i[:, 0],
+                yerr=tspec_i[:, 1],
+                fmt = 'o',
+        )
+    return ax
