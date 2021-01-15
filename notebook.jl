@@ -226,7 +226,7 @@ end
 
 # ╔═╡ 779cdd84-5709-11eb-067c-6d7ac4561990
 let
-	l = @layout [  a{0.3w} [grid(3,3)
+	l = @layout [ a{0.3w} [grid(3,3)
 	                         b{0.2h} ]]
 	plot(
 	    rand(7, 11),
@@ -237,16 +237,16 @@ let
 end
 
 # ╔═╡ dc52d0fc-56f1-11eb-1f03-2d0c940b554c
-function distplot1D(df, key; quantiles=[0.25, 0.50, 0.75])
-	p = @df df stephist(cols(key), fill=true)
+function distplot1D(df, key; quantiles=[0.25, 0.50, 0.75], kwargs...)
+	p = @df df stephist(cols(key), fill=true; kwargs...) # Histogram
 	qs = @df df quantile(cols(key), quantiles) # Quantiles
 	vline!(p, qs)
 	return p
 end
 
 # ╔═╡ c838cdb0-5700-11eb-1e17-b13f17cc64af
-function distplot2D(df, k1, k2)
-	@df df histogram2d(cols(k1), cols(k2))
+function distplot2D(df, k1, k2; kwargs...)
+	@df df histogram2d(cols(k1), cols(k2); kwargs...)
 end
 
 # ╔═╡ d829de14-56ef-11eb-16c2-c5ef0982e63f
@@ -269,27 +269,33 @@ function corner(
 	plts = []
 	n = length(vars)
 	for i in 1:n, j in 1:n
+		xaxis_on = false
+		yaxis_on = false
+		
 		xticks = i == n
 		xguide = i == n ? vars[j] : ""
 		yticks = i > 1 && j == 1
 		yguide = i > 1 && j == 1 ? vars[i] : ""
 		
 		if i == j
-			p = plot()
-			# p = distplot1D(
-			# 	df,
-			# 	vars[i];
-			# 	quantiles=quantiles,
-			# 	# xticks=xticks,
-			# 	# yticks=yticks,
-			# 	# xguide=xguide,
-			# 	# yguide=yguide,
-			# )
+			p = distplot1D(
+				df,
+				vars[i];
+				quantiles=quantiles,
+				xaxis_on=xaxis_on,
+				yaxis_on=yaxis_on,
+				# xticks=xticks,
+				# yticks=yticks,
+				# xguide=xguide,
+				# yguide=yguide,
+			)
 		elseif i > j
 			p = distplot2D(
 				df,
 				vars[j],
 				vars[i],
+				xaxis_on=xaxis_on,
+				yaxis_on=yaxis_on,
 				# quantiles=quantiles,
 				# bandwidthx=bandwidthx,
 				# bandwidthy=bandwidthy,
@@ -306,6 +312,12 @@ function corner(
 	end
 
 	plot(plts...; layout=(n, n), leg=false, kwargs...)
+end
+
+# ╔═╡ 100f5854-570e-11eb-0479-c1d3f40abfbc
+function f(x; c=4, kwargs...)
+	println("yea")
+	stephist(x; label="hey", kwargs...)
 end
 
 # ╔═╡ 8fbbec74-f970-11ea-34d8-174a293a4107
@@ -522,6 +534,7 @@ plotly()
 # ╠═779cdd84-5709-11eb-067c-6d7ac4561990
 # ╠═dc52d0fc-56f1-11eb-1f03-2d0c940b554c
 # ╠═c838cdb0-5700-11eb-1e17-b13f17cc64af
+# ╠═100f5854-570e-11eb-0479-c1d3f40abfbc
 # ╟─8fbbec74-f970-11ea-34d8-174a293a4107
 # ╟─4494f844-f98b-11ea-330d-e3c18965972d
 # ╠═b38c37b6-f970-11ea-033e-6d215c8b87df
