@@ -16,8 +16,14 @@ end
 # ╔═╡ f782c84a-5710-11eb-01f7-d9a9905637aa
 using StatsPlots.Plots.PlotMeasures
 
+# ╔═╡ b4f02958-5735-11eb-1df4-090e7cb73519
+using KernelDensity
+
 # ╔═╡ de8e285c-f93c-11ea-1571-a5a5dbc48e3c
 using PlutoUI, StatsPlots, CSV, CCDReduction, FITSIO, DataFrames, DataFramesMeta, Glob, AstroImages, HDF5, Dates, Printf, PyCall, RecursiveArrayTools, BenchmarkTools, Statistics, PaddedViews
+
+# ╔═╡ 374fe5f2-5731-11eb-1607-918d7e1432d5
+TableOfContents(depth=10)
 
 # ╔═╡ cea3f932-f935-11ea-0eb3-4f47e65da5fa
 md"""
@@ -220,117 +226,38 @@ if run_GPT_WLC
 	end
 end
 
-# ╔═╡ 0c4ae930-56ec-11eb-079e-39a8aa8f1924
+# ╔═╡ e2387b52-572d-11eb-1460-0dc9ab7a1866
+md"""### $(@bind run_GPT_WLC_corner CheckBox()) GPT WLC Corner Plot
+
+Visualize GPT data stored in
+"""
+
+# ╔═╡ 6fa1fd52-573c-11eb-2597-d9ac3957e144
+# The filter version below would be great if the dict keys were already keys, but they're not cause python =\
 function sub_dict(dict, keys)
-	Dict(
-		Symbol(index)=>value for (index, value) in pairs(dict) if index ∈ keys
-	)
+    Dict(
+        Symbol(index)=>value for (index, value) in pairs(dict) if index ∈ keys
+    )
 end
 
-# ╔═╡ 779cdd84-5709-11eb-067c-6d7ac4561990
-# let
-# 	l = @layout [ a{0.3w} [grid(3,3)
-# 	                         b{0.2h} ]]
-# 	plot(
-# 	    rand(7, 11),
-# 	    layout = l, legend = false, seriestype = [:bar :scatter :path],
-# 	    title = ["($i)" for j = 1:1, i=1:11], titleloc = :right, titlefont = font(8),
-# 	    link = :both
-# 	)
-# end
+# d_gpts = filter(
+# 	p -> p.first ∈ ["p", "t0", "P", "rho", "inc", "b", "aRs", "q1"],
+# 	d_pkl_gpts
+# )
 
 # ╔═╡ dc52d0fc-56f1-11eb-1f03-2d0c940b554c
 function distplot1D(df, key; quantiles=[0.25, 0.50, 0.75], kwargs...)
-	p = @df df stephist(cols(key), fill=true; kwargs...) # Histogram
+	p = @df df stephist(cols(key), c=:blue, fill=true; kwargs...) # Histogram
 	qs = @df df quantile(cols(key), quantiles) # Quantiles
 	vline!(p, qs)
 	return p
 end
 
-# ╔═╡ c838cdb0-5700-11eb-1e17-b13f17cc64af
-function distplot2D(df, k1, k2; kwargs...)
-	@df df histogram2d(cols(k1), cols(k2); kwargs...)
-end
+# ╔═╡ 7421e850-5738-11eb-0170-d92e031c6836
+# distplot2D(df_gpts, "b", "aRs", fill=(true, :reds), levels=5)
 
-# ╔═╡ d829de14-56ef-11eb-16c2-c5ef0982e63f
-function corner(
-		df,
-		vars=nothing;
-		quantiles=[0.25,0.50,0.75],
-		bandwidthx=100,
-		bandwidthy=100,
-		kwargs...,
-	)
-
-	# valid variables
-	validvars = propertynames(df)
-	
-	# plot all variables by default
-	isnothing(vars) && (vars = validvars)
-	@assert vars ⊆ validvars "invalid variable name"
-
-	plts = []
-	n = length(vars)
-	for i in 1:n, j in 1:n
-		# Only label axes of first column and last row or plots
-		xaxis = i == n
-		yaxis = j == 1
-		
-		xticks = i == n
-		xguide = i == n ? vars[j] : ""
-		yticks = i > 1 && j == 1
-		yguide = i > 1 && j == 1 ? vars[i] : ""
-		
-		# 1D histograms
-		if i == j
-			p = distplot1D(
-				df,
-				vars[i];
-				quantiles=quantiles,
-				xaxis=xaxis,
-				yaxis=yaxis,
-				xrotation=45,
-				yrotation=45,
-				bottom_margin=0px,
-				# xticks=xticks,
-				# yticks=yticks,
-				# xguide=xguide,
-				# yguide=yguide,
-			)
-		# 2D histograms
-		elseif i > j
-			p = distplot2D(
-				df,
-				vars[j],
-				vars[i],
-				xaxis=xaxis,
-				yaxis=yaxis,
-				xrotation=45,
-				yrotation=45,
-				bottom_margin=0px,
-				# quantiles=quantiles,
-				# bandwidthx=bandwidthx,
-				# bandwidthy=bandwidthy,
-				# xticks=xticks,
-				# yticks=yticks,
-				# xguide=xguide,
-				# yguide=yguide,
-			)
-		else
-	  		p = plot(framestyle=:none)
-		end
-		
-		push!(plts, p)
-	end
-
-	plot(plts...; layout=(n, n), leg=false, kwargs...)
-end
-
-# ╔═╡ 100f5854-570e-11eb-0479-c1d3f40abfbc
-function f(x; c=4, kwargs...)
-	println("yea")
-	stephist(x; label="hey", kwargs...)
-end
+# ╔═╡ d02112cc-5739-11eb-117f-1db80a9baafc
+gr()
 
 # ╔═╡ 8fbbec74-f970-11ea-34d8-174a293a4107
 md"### Photmetric monitoring"
@@ -483,21 +410,116 @@ if final_extracted_spectra
 end
 
 # ╔═╡ 03b4f076-3e56-11eb-133c-393802c43eb4
-d_pkl_gpts = load_pickle(
-	"data_detrending/HATP26b/out_p/HATP26b/hp26_190313_st/white-light/BMA_posteriors.pkl"
+gpts_pkl_to_dict = load_pickle(
+	"data_detrending/HATP23b/out_c/HATP23b/hp23b_160621_custom/white-light/BMA_posteriors.pkl"
 );
 
 # ╔═╡ 8b1bf7d4-56ee-11eb-2d79-e983c78df3ec
-keys(d_pkl_gpts) |> Text
+with_terminal() do
+	println(keys(gpts_pkl_to_dict))
+end
 
 # ╔═╡ b1259430-56ee-11eb-3bf4-37e96bcc9e44
-d_gpts = sub_dict(d_pkl_gpts, ["p", "b", "aR", "inc", "t0"])
+begin
+	const gpts_params = ["p", "t0", "P", "rho", "inc", "b", "aRs", "q1"]
+	gpts_params_dict = sub_dict(
+		gpts_pkl_to_dict, gpts_params
+	)
+end
+
+# ╔═╡ 6e4cf0ba-5728-11eb-289d-ebd928a3e9f1
+gpts_params_dict[:t0] .-= 2.45485e6; gpts_params_dict
 
 # ╔═╡ bd5fde4c-5705-11eb-3bd3-45befc4431ae
-df_gpts = DataFrame(d_gpts)#[1:10, :]
+df_gpts = DataFrame(gpts_params_dict)#[1:50, :]
+
+# ╔═╡ a0acf0dc-572d-11eb-1065-fdd2fd813c02
+df_gpts |> propertynames
+
+# ╔═╡ c838cdb0-5700-11eb-1e17-b13f17cc64af
+function distplot2D(df, k1, k2; kwargs...)
+	dens = @df df_gpts kde((cols(Symbol(k1)), cols(Symbol(k2))))
+	plot(dens; fill=(true, :Blues), levels=5, kwargs...)
+end
+
+# ╔═╡ d829de14-56ef-11eb-16c2-c5ef0982e63f
+function corner(
+		df,
+		vars=nothing;
+		quantiles=[0.25,0.50,0.75],
+		bandwidthx=100,
+		bandwidthy=100,
+		kwargs...,
+	)
+
+	# valid variables
+	validvars = propertynames(df)
+	
+	# plot all variables by default
+	isnothing(vars) && (vars = validvars)
+	@assert vars ⊆ validvars "invalid variable name"
+
+	plts = []
+	n = length(vars)
+	for i in 1:n, j in 1:n
+		# Only label axes of first column and last row or plots
+		xaxis = i == n
+		yaxis = j == 1
+		
+		xticks = i == n
+		xguide = i == n ? vars[j] : ""
+		yticks = i > 1 && j == 1
+		yguide = i > 1 && j == 1 ? vars[i] : ""
+		
+		# 1D histograms
+		if i == j
+			p = distplot1D(
+				df,
+				vars[i];
+				quantiles = quantiles,
+				xaxis = xaxis,
+				yaxis = yaxis,
+				xrotation = 45,
+				yrotation = 45,
+				title = vars[i],
+				# xticks=xticks,
+				# yticks=yticks,
+				# xguide=xguide,
+				# yguide=yguide,
+			)
+		# 2D histograms
+		elseif i > j
+			p = distplot2D(
+				df,
+				vars[j],
+				vars[i],
+				xaxis = xaxis,
+				yaxis = yaxis,
+				xrotation = 45,
+				yrotation = 45,
+				# quantiles=quantiles,
+				# bandwidthx=bandwidthx,
+				# bandwidthy=bandwidthy,
+				# xticks=xticks,
+				# yticks=yticks,
+				# xguide=xguide,
+				# yguide=yguide,
+			)
+		else
+	  		p = plot(framestyle=:none)
+		end
+		
+		push!(plts, p)
+	end
+
+	return plot(plts...; layout=(n, n), leg=:none, colorbar=:none, kwargs...)
+end
+
+# ╔═╡ f8f6071c-573d-11eb-0b7b-cd0548bfe71e
+Symbol.(gpts_params)
 
 # ╔═╡ c0960acc-5701-11eb-0183-7f3134eb4f1d
-corner(df_gpts, size=(512, 512))
+p = corner(df_gpts, Symbol.(gpts_params), size=(5000, 5000)); savefig("/home/mango/Desktop/test")
 
 # ╔═╡ 6319a232-f8a3-11ea-0a58-7bf7af34ff4d
 begin
@@ -513,6 +535,7 @@ end
 plotly()
 
 # ╔═╡ Cell order:
+# ╟─374fe5f2-5731-11eb-1607-918d7e1432d5
 # ╟─cea3f932-f935-11ea-0eb3-4f47e65da5fa
 # ╠═30a59602-3e46-11eb-083b-01049a15e927
 # ╟─18536d9c-f922-11ea-02ed-5340b350c0c0
@@ -536,18 +559,23 @@ plotly()
 # ╠═bcda6c82-3e53-11eb-34f6-81e71a34a293
 # ╟─586f547e-3714-11eb-0fa1-cf1a1ebd5f50
 # ╟─72c7e8f4-3cc3-11eb-2f6a-07aff33cd8aa
+# ╟─e2387b52-572d-11eb-1460-0dc9ab7a1866
 # ╠═03b4f076-3e56-11eb-133c-393802c43eb4
 # ╠═8b1bf7d4-56ee-11eb-2d79-e983c78df3ec
 # ╠═b1259430-56ee-11eb-3bf4-37e96bcc9e44
+# ╠═6e4cf0ba-5728-11eb-289d-ebd928a3e9f1
+# ╠═6fa1fd52-573c-11eb-2597-d9ac3957e144
 # ╠═bd5fde4c-5705-11eb-3bd3-45befc4431ae
+# ╠═f8f6071c-573d-11eb-0b7b-cd0548bfe71e
+# ╠═a0acf0dc-572d-11eb-1065-fdd2fd813c02
 # ╠═c0960acc-5701-11eb-0183-7f3134eb4f1d
-# ╠═0c4ae930-56ec-11eb-079e-39a8aa8f1924
 # ╠═f782c84a-5710-11eb-01f7-d9a9905637aa
+# ╠═b4f02958-5735-11eb-1df4-090e7cb73519
 # ╠═d829de14-56ef-11eb-16c2-c5ef0982e63f
-# ╠═779cdd84-5709-11eb-067c-6d7ac4561990
 # ╠═dc52d0fc-56f1-11eb-1f03-2d0c940b554c
+# ╠═7421e850-5738-11eb-0170-d92e031c6836
+# ╠═d02112cc-5739-11eb-117f-1db80a9baafc
 # ╠═c838cdb0-5700-11eb-1e17-b13f17cc64af
-# ╠═100f5854-570e-11eb-0479-c1d3f40abfbc
 # ╟─8fbbec74-f970-11ea-34d8-174a293a4107
 # ╟─4494f844-f98b-11ea-330d-e3c18965972d
 # ╠═b38c37b6-f970-11ea-033e-6d215c8b87df
