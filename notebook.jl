@@ -224,18 +224,44 @@ function sub_dict(dict, keys)
 	)
 end
 
+# ╔═╡ 779cdd84-5709-11eb-067c-6d7ac4561990
+let
+	l = @layout [  a{0.3w} [grid(3,3)
+	                         b{0.2h} ]]
+	plot(
+	    rand(7, 11),
+	    layout = l, legend = false, seriestype = [:bar :scatter :path],
+	    title = ["($i)" for j = 1:1, i=1:11], titleloc = :right, titlefont = font(8),
+	    link = :both
+	)
+end
+
+# ╔═╡ dc52d0fc-56f1-11eb-1f03-2d0c940b554c
+function distplot1D(df, key; quantiles=[0.25, 0.50, 0.75])
+	p = @df df stephist(cols(key), fill=true)
+	qs = @df df quantile(cols(key), quantiles) # Quantiles
+	vline!(p, qs)
+	return p
+end
+
+# ╔═╡ c838cdb0-5700-11eb-1e17-b13f17cc64af
+function distplot2D(df, k1, k2)
+	@df df histogram2d(cols(k1), cols(k2))
+end
+
 # ╔═╡ d829de14-56ef-11eb-16c2-c5ef0982e63f
-function cornerplot2(
-		data_dict,
+function corner(
+		df,
 		vars=nothing;
 		quantiles=[0.25,0.50,0.75],
 		bandwidthx=100,
 		bandwidthy=100,
 		kwargs...,
 	)
-	# valid variables
-	validvars = keys(data_dict) |> collect
 
+	# valid variables
+	validvars = propertynames(df)
+	
 	# plot all variables by default
 	isnothing(vars) && (vars = validvars)
 	@assert vars ⊆ validvars "invalid variable name"
@@ -247,70 +273,40 @@ function cornerplot2(
 		xguide = i == n ? vars[j] : ""
 		yticks = i > 1 && j == 1
 		yguide = i > 1 && j == 1 ? vars[i] : ""
+		
 		if i == j
-	  		p = distplot1d(
-				data_dict,
-				vars[i],
-				quantiles=quantiles,
-				xticks=xticks,
-				yticks=yticks,
-				xguide=xguide,
-				yguide=yguide,
-			)
+			p = plot()
+			# p = distplot1D(
+			# 	df,
+			# 	vars[i];
+			# 	quantiles=quantiles,
+			# 	# xticks=xticks,
+			# 	# yticks=yticks,
+			# 	# xguide=xguide,
+			# 	# yguide=yguide,
+			# )
 		elseif i > j
-			p = distplot2d(
-				data_dict,
+			p = distplot2D(
+				df,
 				vars[j],
 				vars[i],
-				quantiles=quantiles,
-				bandwidthx=bandwidthx,
-				bandwidthy=bandwidthy,
-				xticks=xticks,
-				yticks=yticks,
-				xguide=xguide,
-				yguide=yguide,
+				# quantiles=quantiles,
+				# bandwidthx=bandwidthx,
+				# bandwidthy=bandwidthy,
+				# xticks=xticks,
+				# yticks=yticks,
+				# xguide=xguide,
+				# yguide=yguide,
 			)
 		else
-	  		p = RecipesBase.plot(framestyle=:none)
+	  		p = plot(framestyle=:none)
 		end
-			push!(plts, p)
+		
+		push!(plts, p)
 	end
 
-# 	RecipesBase.plot(plts...; layout=(n,n), kwargs...)
+	plot(plts...; layout=(n, n), leg=false, kwargs...)
 end
-
-# ╔═╡ dc52d0fc-56f1-11eb-1f03-2d0c940b554c
-function plot_1D_hist(df, key; quantiles=[0.25, 0.50, 0.75])
-	p = @df df StatsPlots.density(key, fill=true) # Histogram
-	#qs = @df df quantile(key, quantiles) # Quantiles
-	#vline!(p, qs)
-	return p
-end
-
-# ╔═╡ 14751b7a-56fc-11eb-2f27-1d0f801db547
-# begin
-# 	@show "hey"
-# 	@df gpts_pds_df StatsPlots.density(:b)
-# end
-
-# ╔═╡ 08535b62-56f8-11eb-3d13-099253399bb4
-# plot_1D_hist(gpts_pds_df, :t0)
-
-# ╔═╡ 5d8aaeda-56fa-11eb-16d5-adc7cd47b3e9
-# begin
-# 	p = @df gpts_pds_df density(:t0, fill=true)
-# 	qs = @df gpts_pds_df quantile(:t0, [0.25, 0.50, 0.75])
-# 	vline!(p, qs)
-# end
-
-# ╔═╡ 367271b0-56fb-11eb-29ae-d9d8574a5699
-# @df gpts_pds_df quantile(:b, [0.25, 0.50, 0.75] )
-
-# ╔═╡ 2a025736-56f8-11eb-12a1-9fa08c663c54
-# marginalkde(gpts_pds[:P], gpts_pds[:b])
-
-# ╔═╡ 087c9b3e-56f9-11eb-14fa-4f6d6066ff23
-# @df gpts_pds_df marginalkde(:P, :t0)
 
 # ╔═╡ 8fbbec74-f970-11ea-34d8-174a293a4107
 md"### Photmetric monitoring"
@@ -463,24 +459,21 @@ if final_extracted_spectra
 end
 
 # ╔═╡ 03b4f076-3e56-11eb-133c-393802c43eb4
-corner_pkl_dict = load_pickle(
+d_pkl_gpts = load_pickle(
 	"data_detrending/HATP26b/out_p/HATP26b/hp26_190313_st/white-light/BMA_posteriors.pkl"
 );
 
 # ╔═╡ 8b1bf7d4-56ee-11eb-2d79-e983c78df3ec
-keys(corner_pkl_dict) |> Text
+keys(d_pkl_gpts) |> Text
 
 # ╔═╡ b1259430-56ee-11eb-3bf4-37e96bcc9e44
-gpts_pds = sub_dict(corner_pkl_dict, ["t0", "P", "b"])
+d_gpts = sub_dict(d_pkl_gpts, ["p", "b", "aR", "inc"])
 
-# ╔═╡ e046616a-56f1-11eb-0981-bb14574e9af2
-collect(keys(gpts_pds))[1]
+# ╔═╡ bd5fde4c-5705-11eb-3bd3-45befc4431ae
+df_gpts = DataFrame(d_gpts)#[1:10, :]
 
-# ╔═╡ ced51fe6-56f8-11eb-363a-2dee1a6c0798
-gpts_pds_df = DataFrame(gpts_pds)
-
-# ╔═╡ 0b5a2d80-56fe-11eb-159d-bb6945469cc4
-plot_1D_hist(gpts_pds_df, :b)
+# ╔═╡ c0960acc-5701-11eb-0183-7f3134eb4f1d
+corner(df_gpts)
 
 # ╔═╡ 6319a232-f8a3-11ea-0a58-7bf7af34ff4d
 begin
@@ -493,7 +486,7 @@ begin
 end
 
 # ╔═╡ 1497392c-f96d-11ea-3e29-15d8b60f4559
-gr()
+plotly()
 
 # ╔═╡ Cell order:
 # ╟─cea3f932-f935-11ea-0eb3-4f47e65da5fa
@@ -522,18 +515,13 @@ gr()
 # ╠═03b4f076-3e56-11eb-133c-393802c43eb4
 # ╠═8b1bf7d4-56ee-11eb-2d79-e983c78df3ec
 # ╠═b1259430-56ee-11eb-3bf4-37e96bcc9e44
+# ╠═bd5fde4c-5705-11eb-3bd3-45befc4431ae
+# ╠═c0960acc-5701-11eb-0183-7f3134eb4f1d
 # ╠═0c4ae930-56ec-11eb-079e-39a8aa8f1924
 # ╠═d829de14-56ef-11eb-16c2-c5ef0982e63f
-# ╠═e046616a-56f1-11eb-0981-bb14574e9af2
+# ╠═779cdd84-5709-11eb-067c-6d7ac4561990
 # ╠═dc52d0fc-56f1-11eb-1f03-2d0c940b554c
-# ╠═0b5a2d80-56fe-11eb-159d-bb6945469cc4
-# ╠═14751b7a-56fc-11eb-2f27-1d0f801db547
-# ╠═08535b62-56f8-11eb-3d13-099253399bb4
-# ╠═5d8aaeda-56fa-11eb-16d5-adc7cd47b3e9
-# ╠═367271b0-56fb-11eb-29ae-d9d8574a5699
-# ╠═2a025736-56f8-11eb-12a1-9fa08c663c54
-# ╠═ced51fe6-56f8-11eb-363a-2dee1a6c0798
-# ╠═087c9b3e-56f9-11eb-14fa-4f6d6066ff23
+# ╠═c838cdb0-5700-11eb-1e17-b13f17cc64af
 # ╟─8fbbec74-f970-11ea-34d8-174a293a4107
 # ╟─4494f844-f98b-11ea-330d-e3c18965972d
 # ╠═b38c37b6-f970-11ea-033e-6d215c8b87df
