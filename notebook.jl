@@ -13,6 +13,9 @@ macro bind(def, element)
     end
 end
 
+# ╔═╡ f782c84a-5710-11eb-01f7-d9a9905637aa
+using StatsPlots.Plots.PlotMeasures
+
 # ╔═╡ de8e285c-f93c-11ea-1571-a5a5dbc48e3c
 using PlutoUI, StatsPlots, CSV, CCDReduction, FITSIO, DataFrames, DataFramesMeta, Glob, AstroImages, HDF5, Dates, Printf, PyCall, RecursiveArrayTools, BenchmarkTools, Statistics, PaddedViews
 
@@ -225,16 +228,16 @@ function sub_dict(dict, keys)
 end
 
 # ╔═╡ 779cdd84-5709-11eb-067c-6d7ac4561990
-let
-	l = @layout [ a{0.3w} [grid(3,3)
-	                         b{0.2h} ]]
-	plot(
-	    rand(7, 11),
-	    layout = l, legend = false, seriestype = [:bar :scatter :path],
-	    title = ["($i)" for j = 1:1, i=1:11], titleloc = :right, titlefont = font(8),
-	    link = :both
-	)
-end
+# let
+# 	l = @layout [ a{0.3w} [grid(3,3)
+# 	                         b{0.2h} ]]
+# 	plot(
+# 	    rand(7, 11),
+# 	    layout = l, legend = false, seriestype = [:bar :scatter :path],
+# 	    title = ["($i)" for j = 1:1, i=1:11], titleloc = :right, titlefont = font(8),
+# 	    link = :both
+# 	)
+# end
 
 # ╔═╡ dc52d0fc-56f1-11eb-1f03-2d0c940b554c
 function distplot1D(df, key; quantiles=[0.25, 0.50, 0.75], kwargs...)
@@ -269,33 +272,42 @@ function corner(
 	plts = []
 	n = length(vars)
 	for i in 1:n, j in 1:n
-		xaxis_on = false
-		yaxis_on = false
+		# Only label axes of first column and last row or plots
+		xaxis = i == n
+		yaxis = j == 1
 		
 		xticks = i == n
 		xguide = i == n ? vars[j] : ""
 		yticks = i > 1 && j == 1
 		yguide = i > 1 && j == 1 ? vars[i] : ""
 		
+		# 1D histograms
 		if i == j
 			p = distplot1D(
 				df,
 				vars[i];
 				quantiles=quantiles,
-				xaxis_on=xaxis_on,
-				yaxis_on=yaxis_on,
+				xaxis=xaxis,
+				yaxis=yaxis,
+				xrotation=45,
+				yrotation=45,
+				bottom_margin=0px,
 				# xticks=xticks,
 				# yticks=yticks,
 				# xguide=xguide,
 				# yguide=yguide,
 			)
+		# 2D histograms
 		elseif i > j
 			p = distplot2D(
 				df,
 				vars[j],
 				vars[i],
-				xaxis_on=xaxis_on,
-				yaxis_on=yaxis_on,
+				xaxis=xaxis,
+				yaxis=yaxis,
+				xrotation=45,
+				yrotation=45,
+				bottom_margin=0px,
 				# quantiles=quantiles,
 				# bandwidthx=bandwidthx,
 				# bandwidthy=bandwidthy,
@@ -479,13 +491,13 @@ d_pkl_gpts = load_pickle(
 keys(d_pkl_gpts) |> Text
 
 # ╔═╡ b1259430-56ee-11eb-3bf4-37e96bcc9e44
-d_gpts = sub_dict(d_pkl_gpts, ["p", "b", "aR", "inc"])
+d_gpts = sub_dict(d_pkl_gpts, ["p", "b", "aR", "inc", "t0"])
 
 # ╔═╡ bd5fde4c-5705-11eb-3bd3-45befc4431ae
 df_gpts = DataFrame(d_gpts)#[1:10, :]
 
 # ╔═╡ c0960acc-5701-11eb-0183-7f3134eb4f1d
-corner(df_gpts)
+corner(df_gpts, size=(512, 512))
 
 # ╔═╡ 6319a232-f8a3-11ea-0a58-7bf7af34ff4d
 begin
@@ -530,6 +542,7 @@ plotly()
 # ╠═bd5fde4c-5705-11eb-3bd3-45befc4431ae
 # ╠═c0960acc-5701-11eb-0183-7f3134eb4f1d
 # ╠═0c4ae930-56ec-11eb-079e-39a8aa8f1924
+# ╠═f782c84a-5710-11eb-01f7-d9a9905637aa
 # ╠═d829de14-56ef-11eb-16c2-c5ef0982e63f
 # ╠═779cdd84-5709-11eb-067c-6d7ac4561990
 # ╠═dc52d0fc-56f1-11eb-1f03-2d0c940b554c
