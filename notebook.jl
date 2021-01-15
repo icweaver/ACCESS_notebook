@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.17
+# v0.12.18
 
 using Markdown
 using InteractiveUtils
@@ -14,7 +14,7 @@ macro bind(def, element)
 end
 
 # ╔═╡ de8e285c-f93c-11ea-1571-a5a5dbc48e3c
-using PlutoUI, Plots, StatsPlots, CSV, CCDReduction, FITSIO, DataFrames, DataFramesMeta, Glob, AstroImages, HDF5, Dates, Printf, PyCall, RecursiveArrayTools, BenchmarkTools, Statistics, PaddedViews
+using PlutoUI, StatsPlots, CSV, CCDReduction, FITSIO, DataFrames, DataFramesMeta, Glob, AstroImages, HDF5, Dates, Printf, PyCall, RecursiveArrayTools, BenchmarkTools, Statistics, PaddedViews
 
 # ╔═╡ cea3f932-f935-11ea-0eb3-4f47e65da5fa
 md"""
@@ -217,11 +217,100 @@ if run_GPT_WLC
 	end
 end
 
-# ╔═╡ c86f045e-3e56-11eb-191d-f76a1850b700
-params = ["P", "aRs", "b"]
+# ╔═╡ 0c4ae930-56ec-11eb-079e-39a8aa8f1924
+function sub_dict(dict, keys)
+	Dict(
+		Symbol(index)=>value for (index, value) in pairs(dict) if index ∈ keys
+	)
+end
 
-# ╔═╡ 968d4746-3e57-11eb-2811-7942a3f1bbb8
-# @df df_GPT corrplot([:P :b :aRs :b])
+# ╔═╡ d829de14-56ef-11eb-16c2-c5ef0982e63f
+function cornerplot2(
+		data_dict,
+		vars=nothing;
+		quantiles=[0.25,0.50,0.75],
+		bandwidthx=100,
+		bandwidthy=100,
+		kwargs...,
+	)
+	# valid variables
+	validvars = keys(data_dict) |> collect
+
+	# plot all variables by default
+	isnothing(vars) && (vars = validvars)
+	@assert vars ⊆ validvars "invalid variable name"
+
+	plts = []
+	n = length(vars)
+	for i in 1:n, j in 1:n
+		xticks = i == n
+		xguide = i == n ? vars[j] : ""
+		yticks = i > 1 && j == 1
+		yguide = i > 1 && j == 1 ? vars[i] : ""
+		if i == j
+	  		p = distplot1d(
+				data_dict,
+				vars[i],
+				quantiles=quantiles,
+				xticks=xticks,
+				yticks=yticks,
+				xguide=xguide,
+				yguide=yguide,
+			)
+		elseif i > j
+			p = distplot2d(
+				data_dict,
+				vars[j],
+				vars[i],
+				quantiles=quantiles,
+				bandwidthx=bandwidthx,
+				bandwidthy=bandwidthy,
+				xticks=xticks,
+				yticks=yticks,
+				xguide=xguide,
+				yguide=yguide,
+			)
+		else
+	  		p = RecipesBase.plot(framestyle=:none)
+		end
+			push!(plts, p)
+	end
+
+# 	RecipesBase.plot(plts...; layout=(n,n), kwargs...)
+end
+
+# ╔═╡ dc52d0fc-56f1-11eb-1f03-2d0c940b554c
+function plot_1D_hist(df, key; quantiles=[0.25, 0.50, 0.75])
+	p = @df df StatsPlots.density(key, fill=true) # Histogram
+	#qs = @df df quantile(key, quantiles) # Quantiles
+	#vline!(p, qs)
+	return p
+end
+
+# ╔═╡ 14751b7a-56fc-11eb-2f27-1d0f801db547
+# begin
+# 	@show "hey"
+# 	@df gpts_pds_df StatsPlots.density(:b)
+# end
+
+# ╔═╡ 08535b62-56f8-11eb-3d13-099253399bb4
+# plot_1D_hist(gpts_pds_df, :t0)
+
+# ╔═╡ 5d8aaeda-56fa-11eb-16d5-adc7cd47b3e9
+# begin
+# 	p = @df gpts_pds_df density(:t0, fill=true)
+# 	qs = @df gpts_pds_df quantile(:t0, [0.25, 0.50, 0.75])
+# 	vline!(p, qs)
+# end
+
+# ╔═╡ 367271b0-56fb-11eb-29ae-d9d8574a5699
+# @df gpts_pds_df quantile(:b, [0.25, 0.50, 0.75] )
+
+# ╔═╡ 2a025736-56f8-11eb-12a1-9fa08c663c54
+# marginalkde(gpts_pds[:P], gpts_pds[:b])
+
+# ╔═╡ 087c9b3e-56f9-11eb-14fa-4f6d6066ff23
+# @df gpts_pds_df marginalkde(:P, :t0)
 
 # ╔═╡ 8fbbec74-f970-11ea-34d8-174a293a4107
 md"### Photmetric monitoring"
@@ -374,10 +463,24 @@ if final_extracted_spectra
 end
 
 # ╔═╡ 03b4f076-3e56-11eb-133c-393802c43eb4
-corner_pkl = load_pickle("./Projects/HATP26b/data_detrending/out_r/HATP26/hp26_190313_r/white-light/BMA_posteriors.pkl");
+corner_pkl_dict = load_pickle(
+	"data_detrending/HATP26b/out_p/HATP26b/hp26_190313_st/white-light/BMA_posteriors.pkl"
+);
 
-# ╔═╡ f3ad356e-3e56-11eb-0346-7f6399dc50bf
-df_GPT = DataFrame(corner_pkl)[!, params]
+# ╔═╡ 8b1bf7d4-56ee-11eb-2d79-e983c78df3ec
+keys(corner_pkl_dict) |> Text
+
+# ╔═╡ b1259430-56ee-11eb-3bf4-37e96bcc9e44
+gpts_pds = sub_dict(corner_pkl_dict, ["t0", "P", "b"])
+
+# ╔═╡ e046616a-56f1-11eb-0981-bb14574e9af2
+collect(keys(gpts_pds))[1]
+
+# ╔═╡ ced51fe6-56f8-11eb-363a-2dee1a6c0798
+gpts_pds_df = DataFrame(gpts_pds)
+
+# ╔═╡ 0b5a2d80-56fe-11eb-159d-bb6945469cc4
+plot_1D_hist(gpts_pds_df, :b)
 
 # ╔═╡ 6319a232-f8a3-11ea-0a58-7bf7af34ff4d
 begin
@@ -390,7 +493,7 @@ begin
 end
 
 # ╔═╡ 1497392c-f96d-11ea-3e29-15d8b60f4559
-plotly()
+gr()
 
 # ╔═╡ Cell order:
 # ╟─cea3f932-f935-11ea-0eb3-4f47e65da5fa
@@ -417,9 +520,20 @@ plotly()
 # ╟─586f547e-3714-11eb-0fa1-cf1a1ebd5f50
 # ╟─72c7e8f4-3cc3-11eb-2f6a-07aff33cd8aa
 # ╠═03b4f076-3e56-11eb-133c-393802c43eb4
-# ╠═c86f045e-3e56-11eb-191d-f76a1850b700
-# ╠═f3ad356e-3e56-11eb-0346-7f6399dc50bf
-# ╠═968d4746-3e57-11eb-2811-7942a3f1bbb8
+# ╠═8b1bf7d4-56ee-11eb-2d79-e983c78df3ec
+# ╠═b1259430-56ee-11eb-3bf4-37e96bcc9e44
+# ╠═0c4ae930-56ec-11eb-079e-39a8aa8f1924
+# ╠═d829de14-56ef-11eb-16c2-c5ef0982e63f
+# ╠═e046616a-56f1-11eb-0981-bb14574e9af2
+# ╠═dc52d0fc-56f1-11eb-1f03-2d0c940b554c
+# ╠═0b5a2d80-56fe-11eb-159d-bb6945469cc4
+# ╠═14751b7a-56fc-11eb-2f27-1d0f801db547
+# ╠═08535b62-56f8-11eb-3d13-099253399bb4
+# ╠═5d8aaeda-56fa-11eb-16d5-adc7cd47b3e9
+# ╠═367271b0-56fb-11eb-29ae-d9d8574a5699
+# ╠═2a025736-56f8-11eb-12a1-9fa08c663c54
+# ╠═ced51fe6-56f8-11eb-363a-2dee1a6c0798
+# ╠═087c9b3e-56f9-11eb-14fa-4f6d6066ff23
 # ╟─8fbbec74-f970-11ea-34d8-174a293a4107
 # ╟─4494f844-f98b-11ea-330d-e3c18965972d
 # ╠═b38c37b6-f970-11ea-033e-6d215c8b87df
