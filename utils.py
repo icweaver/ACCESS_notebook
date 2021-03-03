@@ -1331,6 +1331,10 @@ def compare_arc_lines(
             col_name_pixel = "Pixel"
             col_name_wav = "User"
             sep = '\s+'
+        elif ".txt" in fpath_lines_ref:
+            col_name_pixel = "Pix"
+            col_name_wav = "Wav"
+            sep = '\t'
         else:
             col_name_pixel = "Pix"
             col_name_wav = "Wav"
@@ -1386,7 +1390,7 @@ def compare_arc_lines(
         wavs=wavs,
         pixels=pixels,
         c='b',
-        ann_c='g',
+        ann_c="lime",
     )
     # Highlight wavelengths in top panel if already selected in bottom
     annotations = [
@@ -1394,8 +1398,9 @@ def compare_arc_lines(
         if isinstance(child, plt.matplotlib.text.Annotation)
     ]
     for ann in annotations:
-        if float(ann.get_text()) in wavs:
-            ann.set_color('g')
+        if float(ann.get_text().split('\n')[1]) in wavs:
+            ann.set_color("lime")
+            ann.set_fontsize(12)
 
     path = pathlib.PurePath(fpath_arc)
     parents = path.parents
@@ -1411,10 +1416,10 @@ def compare_arc_lines(
         # Highlights selected annotation and stores the associated wavelength value
         ann = event.artist
         ann.set_color("g")
-        wav = ann.get_text()
+        wav = ann.get_text().split(',')[1]
         wavs.append(float(wav))
         # Annotes the wavelength value on bottom panel for ease of reference
-        ax_lco.annotate(wav, xy=(x+1, y+0.02), fontsize=10, alpha=0.5, c='g')
+        ax_lco.annotate(wav, xy=(x+1, y+0.02), fontsize=10, c='g')
         fig.canvas.draw()
         fig.canvas.mpl_disconnect(cid) # Only run once per `X` press on keyboard
 
@@ -1424,7 +1429,7 @@ def compare_arc_lines(
             pixel = event.xdata
             pixels.append(pixel)
             y = event.ydata
-            ax_lco.axvline(pixel, c='r', ls='--', lw=0.5)
+            ax_lco.axvline(pixel, c='r', ls='--', lw=1)
             ax_lco.plot(pixel, y, 'rX')
 
             # Collect wavelength info after mouse press
@@ -1453,10 +1458,10 @@ def _plot_arc(ax, fluxes, wavs=None, pixels=None, c="C0", ann_c="lightgrey"):
             ys.append(fluxes[int(pixel)])
         for wav, pixel, y in zip(wavs, pixels, ys):
             ax.annotate(
-                f"{wav:.4f}", (pixel, y),
-                fontsize=10, alpha=0.5, picker=1, color=ann_c,
+                f"{pixel:.1f}\n{wav:.4f}", (pixel, y),
+                fontsize=12, picker=1, color=ann_c,
             )
-            ax.axvline(pixel, lw=0.5, ls = '--', c='r', alpha=0.5)
+            ax.axvline(pixel, lw=1, ls = '--', c='r')
 
     ax.set_xlabel("Pixel")
     ax.set_ylabel("Normalized flux")

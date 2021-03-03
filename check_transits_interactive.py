@@ -7,7 +7,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from datetime import timedelta
 from scipy.signal import medfilt
-from opts_check_transit_interactive_WASP50 import *
+from opts_check_transit_interactive_WASP80_ut160712_13 import *
 import glob
 from tqdm import tqdm
 

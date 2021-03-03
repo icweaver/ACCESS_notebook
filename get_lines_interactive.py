@@ -1,11 +1,14 @@
 import glob
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import numpy as np
 import os, sys
 import astropy.io.fits as pyfits
 from scipy.interpolate import interp1d
 from scipy.signal import medfilt
 from scipy.optimize import curve_fit
+
+mpl.use("Qt5Agg")
 
 ##############################################
 #Functions
@@ -14,7 +17,7 @@ def gauss(x, a, mu, sigma):
     return a*np.exp((-(x-mu)**2)/(2*sigma**2))
 
 def lorentz(x, I, x_0, HWHM):
-	return I * ( HWHM**2 / ( (x - x_0)**2 + HWHM**2 ) )
+    return I * ( HWHM**2 / ( (x - x_0)**2 + HWHM**2 ) )
 
 def InteractiveID(star, chip, init_wav, init_pix, all_lines, o, width=5, fitorder=2, binning=2):
     #loading data for this chip
@@ -27,8 +30,9 @@ def InteractiveID(star, chip, init_wav, init_pix, all_lines, o, width=5, fitorde
     f = interp1d(pix,flux)
     #making interactive plot
     #plt.ion()
-    fig = plt.figure('Star: '+star+' | Chip: '+str(chip))
-    ax = fig.add_subplot(1,1,1)
+    #fig = plt.figure('Star: '+star+' | Chip: '+str(chip))
+    #ax = fig.add_subplot(1,1,1)
+    fig, ax = plt.subplots(num=f"Star: {star} | Chip: {chip}", figsize=(11, 6))
     # plot calibrated lamp:
     plt.plot(pix,flux)
     # Predict lines...
@@ -44,7 +48,7 @@ def InteractiveID(star, chip, init_wav, init_pix, all_lines, o, width=5, fitorde
     #fitting procedure
     Done = False
     for i in range(len(wav_lines)):
-        j = (i-1)%len(wav_lines)			# For identifying nearby lines
+        j = (i-1)%len(wav_lines)            # For identifying nearby lines
         k = (i+1)%len(wav_lines)
         line = wav_lines[i]
         pixel = pix_lines[i]
@@ -87,7 +91,7 @@ def InteractiveID(star, chip, init_wav, init_pix, all_lines, o, width=5, fitorde
                     PixelCenterIsGood = True
             print('Fitting profile to line.')
             Fitting = True
-            l_width = np.min([width, np.abs( (pix_lines[i]-pix_lines[j])/2. )])	# Restrict fitting window if known line nearby
+            l_width = np.min([width, np.abs( (pix_lines[i]-pix_lines[j])/2. )]) # Restrict fitting window if known line nearby
             r_width = np.min([width, np.abs( (pix_lines[k]-pix_lines[i])/2. )])
             x = np.arange(pixel-l_width, pixel+r_width, 0.1)
             try:
