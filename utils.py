@@ -1,3 +1,4 @@
+import arviz as az
 import glob as glob
 import matplotlib as mpl
 import matplotlib.patheffects as PathEffects
@@ -8,8 +9,10 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
+import batman
 import bz2
 import corner
+import george
 import json
 import pathlib
 import pickle
@@ -135,14 +138,18 @@ def get_phases(t, P, t0):
     and time of transit center (or posterior), returns the
     phase at each time t. From juliet =]
     """
-    if type(t) is not float:
-        phase = ((Time(t) - t0) / P) % 1
+    phase = ((t - t0) / P) % 1
+
+    if not isinstance(t, (int, float, np.int, np.float, Time)):
         ii = np.where(phase >= 0.5)[0]
         phase[ii] = phase[ii] - 1.0
     else:
-        phase = ((t - np.median(t0)) / np.median(P)) % 1
-        if phase >= 0.5:
-            phase = phase - 1.0
+        phase = phase - 1.0
+    #else:
+    #    phase = ((t - np.median(t0)) / np.median(P)) % 1
+    #    ii = np.where(phase >= 0.5)[0]
+    #    phase[ii] = phase[ii] - 1.0
+
     return phase
 
 
@@ -357,7 +364,9 @@ def plot_aperture(fpath):
 
     return fig, axes, data
 
-def plot_chips(dirpath, fpathame, target="", vmin=0, vmax=2_000, spec_ap=0, sky_ap=0):
+def plot_chips(
+    dirpath, fpathame, target="", vmin=0, vmax=2_000, spec_ap=0, sky_ap=0, llama=False,
+    ):
     # This plots the chips by numbers:
     #
     # 1 2 3 4
@@ -461,8 +470,13 @@ def plot_chips(dirpath, fpathame, target="", vmin=0, vmax=2_000, spec_ap=0, sky_
     ############
     image = fpathame
     otype = image[0:3]
-    chips = ["c1", "c2", "c3", "c4", "c6", "c5", "c8", "c7"]
-    order = [1, 2, 3, 4, 6, 5, 8, 7]
+    if llama:
+        chips = ["c6", "c5", "c8", "c7", "c1", "c2", "c3", "c4"]
+        order = [6, 5, 8, 7, 1, 2, 3, 4]
+    else:
+        chips = ["c1", "c2", "c3", "c4", "c6", "c5", "c8", "c7"]
+        order = [1, 2, 3, 4, 6, 5, 8, 7]
+
     ranges = [vmin, vmax]
 
     fig = plt.figure(figsize=(8, 8))
@@ -528,9 +542,11 @@ def plot_chips(dirpath, fpathame, target="", vmin=0, vmax=2_000, spec_ap=0, sky_
         #date_time = f"{h['DATE-OBS']} -- {h['TIME-OBS']}"
         #date_time = f"{h['DATE-OBS']} -- {h['LC-TIME']}"
 
+    if llama:
+        ax.invert_yaxis()
     plt.axis("off")
     fig.colorbar(im, cax=grid.cbar_axes[0])
-    return fig, im
+    return fig, im, grid
 
 
 def plot_corner(
@@ -561,8 +577,9 @@ def plot_corner(
     #############
     # Plot corner
     #############
+    data = az.from_dict(posterior=samples)
     fig = corner.corner(
-        samples,
+        data,
         plot_datapoints=False,
         color=c,
         labels=labels,
@@ -586,7 +603,7 @@ def plot_corner(
     )
 
     # Loop over 1D histograms and overplot truth values
-    ndim = samples.shape[1]
+    ndim = len(samples) #samples.shape[1]
     axes = np.array(fig.axes).reshape((ndim, ndim))
 
     # Turn grid lines off
@@ -618,6 +635,7 @@ def plot_divided_wlcs(
     flux_comps = data["cLC"]
     cNames = data["cNames"]  # Original unsorted order from tepspec
     time = data["t"]
+    time_idxs = np.array(range(0, len(time)))
     airmass = data["Z"]
     flux_comps = flux_comps[:, np.argsort(cNames)]  # Sort columns by cName
     cNames = sorted(cNames)
@@ -632,48 +650,61 @@ def plot_divided_wlcs(
     flux_divs /= np.median(flux_divs, axis=0)
 
     for flux_div, cName in zip(flux_divs.T, comps_to_use):
-        bad_idxs = []
-        for i in range(1, len(flux_div) - 1):
-            diff_left = np.abs(flux_div[i] - flux_div[i - 1])
-            diff_right = np.abs(flux_div[i] - flux_div[i + 1])
-            if ((diff_left > 2 * ferr) and (diff_right > 2 * ferr)) or airmass[i] >= 2:
-                bad_idxs.append(i)
-        # print(cName, bad_idxs)
-
-        # ax.plot(
-        #    (time[bad_idxs] - t0) * 24.0,
-        #    flux_div[bad_idxs],
-        #    #yerr=ferr,
-        #    "k.",
-        #    ms=15,
-        #    zorder=10,
-        #    #**bad_div_kwargs,
-        # )
-        if bad_idxs_user is not None:
-            if isinstance(bad_idxs_user, str):
-                bad_idxs_user = _bad_idxs(bad_idxs_user)
-
-            # print(bad_idxs_user)
-            ax.errorbar(
-                (time[bad_idxs_user] - t0) * 24.0,
-                flux_div[bad_idxs_user],
-                yerr=ferr,
-                zorder=10,
-                **bad_div_kwargs,
-            )
-            # bad_idxs = set(bad_idxs_user).union(set(bad_idxs))
-            # bad_idxs = list(bad_idxs)
-
         idxs = np.arange(len(flux_div))
         flux_div_used = flux_div  # [idxs != bad_idxs_user]
         idxs_used = idxs  # [idxs != bad_idxs_user]
-        ax.errorbar(
+        p = ax.errorbar(
             (time[idxs_used] - t0) * 24.0,
+            #time_idxs[idxs_used],
             flux_div_used,
             yerr=ferr,
             label=cName,
             **div_kwargs,
         )
+
+        bad_idxs = []
+        for i in range(1, len(flux_div) - 1):
+            diff_left = np.abs(flux_div[i] - flux_div[i - 1])
+            diff_right = np.abs(flux_div[i] - flux_div[i + 1])
+            if ((diff_left > 3 * ferr) and (diff_right > 3 * ferr)) or airmass[i] >= 2:
+                bad_idxs.append(i)
+        print(cName, bad_idxs)
+        print()
+
+        ax.errorbar(
+           (time[bad_idxs] - t0) * 24.0,
+           #time_idxs[bad_idxs],
+           flux_div[bad_idxs],
+           yerr=ferr,
+           fmt = '.',
+           mew = 0.0,
+           ms = 14,
+           lw = 2,
+           color = "lightgrey",
+           #"k.",
+           #ms=15,
+           #zorder=10,
+           #**bad_div_kwargs,
+        )
+        if bad_idxs_user is not None:
+            if isinstance(bad_idxs_user, str):
+                bad_idxs_user = _bad_idxs(bad_idxs_user)
+
+            # print(bad_idxs_user)
+            C_i = int(p[0].get_color()[1])
+            ax.plot(
+                (time[bad_idxs_user] - t0) * 24.0,
+                #time_idxs[bad_idxs_user],
+                flux_div[bad_idxs_user],
+                '.',
+                c=f"C{C_i + 1}",
+                ms = 5,
+                #yerr=ferr,
+                zorder=10,
+                #**bad_div_kwargs,
+            )
+            # bad_idxs = set(bad_idxs_user).union(set(bad_idxs))
+            # bad_idxs = list(bad_idxs)
 
     return ax, bad_idxs
 
@@ -878,9 +909,10 @@ def _plot_spec_file(ax, fpath=None, data=None, wavs=None, i=1, label=None,
     specs[specs <= 0] = np.nan # sanitize data
     specs_med = np.nanmedian(specs, axis=0)
     specs_std = np.nanstd(specs, axis=0)
-    factor = np.nanmedian(specs_med)
-    specs_med #/= factor
-    specs_std #/= factor
+    #factor = np.nanmedian(specs_med)
+    factor = 1.0 #np.nanmax(specs_med)
+    specs_med /= factor
+    specs_std /= factor
 
 
     # empty plot for custom legend
@@ -891,8 +923,8 @@ def _plot_spec_file(ax, fpath=None, data=None, wavs=None, i=1, label=None,
     specs_std #/= np.nanmax(specs_med)
     c = p[0].get_color()
     ax.fill_between(wavs, specs_med - specs_std, specs_med + specs_std, color=c, alpha=0.25, lw=0)
-    ax.plot(wavs, specs_med, lw=2, color=c)
-    return ax, wavs, data
+    p = ax.plot(wavs, specs_med, lw=2, color=c)
+    return p, wavs, data
 
 def plot_spec_file_objects(ax, fpath, i=1, c=None, label=None):
     obj = fpath.split('/')[-1].split("_spec")[0]
@@ -1189,6 +1221,48 @@ def wbin_num(fpath):
             bin_num = int(bin_str)
             return bin_num
 
+# Make a batman model
+def init_batman(t, law):
+    """
+    This function initializes the batman code.
+    """
+    params = batman.TransitParams()
+    params.t0 = 0.
+    params.per = 1.
+    params.rp = 0.1
+    params.a = 15.
+    params.inc = 87.
+    params.ecc = 0.
+    params.w = 90.
+    if law == 'linear':
+        params.u = [0.5]
+    else:
+        params.u = [0.1, 0.3]
+    params.limb_dark = law
+    m = batman.TransitModel(params, t)
+    return params, m
+
+def get_transit_model(t, lc_params):
+    # Load ld params and init model
+    ld_law = lc_params['ld_law']
+    params, m = init_batman(t, law=ld_law)
+    q1 = lc_params['q1']
+    if ld_law != 'linear':
+        q2 = lc_params['q2']
+        coeff1, coeff2 = reverse_ld_coeffs(ld_law, q1, q2)
+        params.u = [coeff1, coeff2]
+    else:
+        params.u = [q1]
+
+    # Load the rest of the transit params
+    params.t0 = lc_params['t0']
+    params.per = lc_params['P']
+    params.rp = lc_params['p']
+    params.a = lc_params['a']
+    params.inc = lc_params['inc']
+    return m.light_curve(params)
+
+
 
 def weighted_err(errs):
     weights = 1 / errs ** 2
@@ -1371,19 +1445,27 @@ def compare_arc_lines(
     arc_flux_lco = fits_data(fpath_arc)
 
     # Create guesses file if not done already
-    if not os.path.exists(fpath_lines):
+    if not os.path.exists(fpath_lines) and ".txt" not in fpath_lines:
         data = {'#Wav':[], "Pix":[], "Chip":[]}
         df_guesses = pd.DataFrame(data)
         df_guesses.to_csv(fpath_lines, index=False)
+        df_lco = pd.read_csv(
+            fpath_lines,
+            usecols=["Wav", "Pix", "Chip"],
+            escapechar='#',
+        )
+        wavs = df_lco["Wav"].to_numpy().flatten()
+        pixels = df_lco["Pix"].to_numpy().flatten()
+    else:
+        df_lco = pd.read_csv(
+            fpath_lines,
+            usecols=["Wav", "Pix", "Chip"],
+            escapechar='#',
+            sep = '\t'
+        )
+        wavs = df_lco["Wav"].to_numpy().flatten()
+        pixels = df_lco["Pix"].to_numpy().flatten()
 
-    print(fpath_lines)
-    df_lco = pd.read_csv(
-        fpath_lines,
-        usecols=["Wav", "Pix", "Chip"],
-        escapechar='#',
-    )
-    wavs = df_lco["Wav"].to_numpy().flatten()
-    pixels = df_lco["Pix"].to_numpy().flatten()
     _plot_arc(
         ax_lco,
         arc_flux_lco,
@@ -1407,6 +1489,7 @@ def compare_arc_lines(
     fname = path.name
     title = f"{parents[1].name}/{parents[0].name}/{fname}"
     ax_lco.set_title(title)
+    fig.tight_layout()
 
     ########################
     # Record wav/pixel pairs
@@ -1416,7 +1499,7 @@ def compare_arc_lines(
         # Highlights selected annotation and stores the associated wavelength value
         ann = event.artist
         ann.set_color("g")
-        wav = ann.get_text().split(',')[1]
+        wav = ann.get_text().split('\n')[1]
         wavs.append(float(wav))
         # Annotes the wavelength value on bottom panel for ease of reference
         ax_lco.annotate(wav, xy=(x+1, y+0.02), fontsize=10, c='g')
@@ -1480,3 +1563,248 @@ def plot_pix_wav(ax, df, x_name, y_name, comp_name):
         p = ax.plot(x, y, '.', lw=0.5, label=f"{label}, m={m:.3f}")
         c = p[0].get_color()
         ax.plot(x_interp, m*x_interp + b, c=c, lw=0.5)
+
+def plot_fluxes(
+    ax,
+    data,
+    normalize=False,
+    oot=False,
+    idx_oot=None,
+    use_time=True,
+    t0=0,
+):
+    targ_flux = data["oLC"]
+    comp_fluxes = data["cLC"]
+    cNames = data["cNames"]
+    exptime = data["etimes"]
+
+    if use_time:
+        time = (data["t"] - t0) * 24.0
+    else:
+        time = range(len(targ_flux))
+
+
+    if normalize:
+        #comp_fluxes = comp_fluxes / np.max(targ_flux)
+        comp_fluxes = comp_fluxes / np.median(comp_fluxes, axis=0)
+        targ_flux = targ_flux / np.median(targ_flux)
+
+    if oot:
+        targ_flux = targ_flux[idx_oot]
+        comp_fluxes = comp_fluxes[idx_oot, :]
+        time = time[idx_oot]
+
+    # Plot
+    targ_flux /= exptime
+    comp_fluxes = comp_fluxes / exptime[:, None]
+    ax.plot(time, targ_flux, '.', label="target")
+    for cName, comp in zip(cNames, comp_fluxes.T):
+        if "7" not in cName:
+            ax.plot(time, comp, '.', label=cName)
+
+    plot_data = {
+        "time":time,
+        "targ_flux":targ_flux,
+        "comp_fluxes":comp_fluxes,
+        "cNames":cNames,
+    }
+
+    ax.legend(fontsize=12)
+    return ax, plot_data
+
+def detrend_BMA_WLC(
+    out_folder,
+    ld_law="linear",
+    eccmean=0.0,
+    omegamean=90.0,
+    pl=0.0,
+    pu=1.0,
+    JITTER=(200.0 * 1e-6)**2.0,
+):
+    # File paths
+    lc_path = f"{out_folder}/lc.dat"
+    BMA_path = f"{out_folder}/results.dat"
+    comps_path = f"{out_folder}/comps.dat"
+    eparams_path = f"{out_folder}/../eparams.dat"
+
+    # Raw data
+    tall, fall, f_index = np.genfromtxt(lc_path, unpack=True)
+    idx = np.where(f_index == 0)[0]
+    t, f = tall[idx], fall[idx]
+
+    # External params
+    data = np.genfromtxt(eparams_path)
+    X = (data - np.mean(data, axis=0)) / np.std(data, axis=0)
+
+    # Comp stars
+    data = np.genfromtxt(comps_path)
+    Xc = (data - np.mean(data, axis=0)) / np.std(data, axis=0)
+    if len(Xc.shape) != 1:
+        eigenvectors, eigenvalues, PC = classic_PCA(Xc.T)
+        Xc = PC.T
+    else:
+        Xc = Xc[:, None]
+
+    ########################
+    # BMA transit model vals
+    ########################
+    BMA = pd.read_table(
+        BMA_path,
+        escapechar='#',
+        sep="\s+",
+        index_col=" Variable",
+    )
+
+    mmeani, t0, P, r1, r2, q1 = (
+        BMA.at["mmean", "Value"],
+        BMA.at["t0", "Value"],
+        BMA.at["P", "Value"],
+        BMA.at["r1", "Value"],
+        BMA.at["r2", "Value"],
+        BMA.at["q1", "Value"],
+    )
+
+    if "rho" in BMA.columns:
+        rhos = BMA.at["rho", "Value"]
+        aR = ((rhos * G * ((P * 24.0 * 3600.0) ** 2)) / (3.0 * np.pi)) ** (
+            1.0 / 3.0
+        )
+    else:
+        aR = BMA.at["aR", "Value"]
+
+    Ar = (pu - pl) / (2.0 + pl + pu)
+    if r1 > Ar:
+        b, p = (
+            (1 + pl) * (1.0 + (r1 - 1.0) / (1.0 - Ar)),
+            (1 - r2) * pl + r2 * pu,
+        )
+    else:
+        b, p = (
+            (1.0 + pl) + np.sqrt(r1 / Ar) * r2 * (pu - pl),
+            pu + (pl - pu) * np.sqrt(r1 / Ar) * (1.0 - r2),
+        )
+
+    ecc = eccmean
+    omega = omegamean
+    ecc_factor = (1.0 + ecc * np.sin(omega * np.pi / 180.0)) / (
+        1.0 - ecc ** 2
+    )
+    inc_inv_factor = (b / aR) * ecc_factor
+    inc = np.arccos(inc_inv_factor) * 180.0 / np.pi
+
+    # Comp star model
+    mmean = BMA.at["mmean", "Value"]
+    xcs = [xci for xci in BMA.index if "xc" in xci]
+    xc = np.array([BMA.at[f"{xci}", "Value"] for xci in xcs])
+    comp_model = mmean + np.dot(Xc[idx, :], xc)
+
+    ###############
+    # Transit model
+    ###############
+    params, m = init_batman(t, law=ld_law)
+
+    if ld_law != "linear":
+        q2 = BMA.at["posterior_samples"]["q2", "Value"]
+        coeff1, coeff2 = reverse_ld_coeffs(ld_law, q1, q2)
+        params.u = [coeff1, coeff2]
+    else:
+        params.u = [q1]
+
+    params.t0 = t0
+    params.per = P
+    params.rp = p
+    params.a = aR
+    params.inc = inc
+    params.ecc = ecc
+    params.w = omega
+
+    lcmodel = m.light_curve(params)
+    model = -2.51 * np.log10(lcmodel)
+
+    #####
+    # GP
+    ####
+    kernel = np.var(f) * george.kernels.Matern32Kernel(
+        np.ones(X[idx, :].shape[1]),
+        ndim=X[idx, :].shape[1],
+        axes=list(range(X[idx, :].shape[1])),
+    )
+
+    jitter = george.modeling.ConstantModel(np.log(JITTER))
+    ljitter = np.log(BMA.at["jitter", "Value"]**2)
+    max_var = BMA.at["max_var", "Value"]
+    alpha_names = [k for k in BMA.index if "alpha" in k]
+    alphas = np.array([BMA.at[alpha, "Value"] for alpha in alpha_names])
+
+    gp = george.GP(
+        kernel,
+        mean=0.0,
+        fit_mean=False,
+        white_noise=jitter,
+        fit_white_noise=True,
+    )
+    gp.compute(X[idx, :])
+    gp_vector = np.r_[ljitter, np.log(max_var), np.log(1.0 / alphas)]
+    gp.set_parameter_vector(gp_vector)
+
+    #############
+    # Detrending
+    ############
+    residuals = f - (model + comp_model)
+    pred_mean, pred_var = gp.predict(residuals, X, return_var=True)
+
+    detrended_lc = f - (comp_model + pred_mean)
+
+    LC_det = 10**(-detrended_lc/2.51)
+    LC_det_err = np.sqrt(np.exp(ljitter))
+    LC_transit_model = lcmodel
+    LC_systematics_model = comp_model + pred_mean
+
+    return {
+       "LC_det":LC_det,
+       "LC_det_err":LC_det_err,
+       "LC_transit_model":LC_transit_model,
+       "LC_systematics_model":LC_systematics_model,
+       "comp_model":comp_model,
+       "pred_mean":pred_mean,
+       "t":t,
+       "t0":t0,
+       "P":P,
+   }
+
+# PCA TOOLS:
+def get_sigma(x):
+    """
+    This function returns the MAD-based standard-deviation.
+    """
+    median = np.median(x)
+    mad = np.median(np.abs(x-median))
+    return 1.4826*mad
+
+def standarize_data(input_data):
+    output_data = np.copy(input_data)
+    averages = np.median(input_data,axis=1)
+    for i in range(len(averages)):
+        sigma = get_sigma(output_data[i,:])
+        output_data[i,:] = output_data[i,:] - averages[i]
+        output_data[i,:] = output_data[i,:]/sigma
+    return output_data
+
+
+def classic_PCA(Input_Data, standarize = True):
+    """
+    classic_PCA function
+    Description
+    This function performs the classic Principal Component Analysis on a given dataset.
+    """
+    if standarize:
+        Data = standarize_data(Input_Data)
+    else:
+        Data = np.copy(Input_Data)
+    eigenvectors_cols,eigenvalues,eigenvectors_rows = np.linalg.svd(np.cov(Data))
+    idx = eigenvalues.argsort()
+    eigenvalues = eigenvalues[idx[::-1]]
+    eigenvectors_cols = eigenvectors_cols[:,idx[::-1]]
+    eigenvectors_rows = eigenvectors_rows[idx[::-1],:]
+    # Return: V matrix, eigenvalues and the principal components.
+    return eigenvectors_rows,eigenvalues,np.dot(eigenvectors_rows,Data)

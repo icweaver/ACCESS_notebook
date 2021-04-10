@@ -7,40 +7,12 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from datetime import timedelta
 from scipy.signal import medfilt
-from opts_check_transit_interactive_WASP80_ut160712_13 import *
+from opts_check_transit_interactive_WASP107_ut210326 import *
 import glob
 from tqdm import tqdm
 
 # from astropy.io import ascii
 
-##INPUT PARAMETERS###########################
-
-"""
-target      = 'HATP23b'
-filedir         = '../data/HATP23/ut180603'
-pklname     = 'HATP23_WLC_OTG.pickle.save'
-coords_file = 'HATP23_coords'
-science_objects = ['science']   #List of object descriptors that indicate a science frame.
-first_frame = '51'      #Not necessary, but you can use it to truncate the file list.
-last_frame  = ''
-bad_comps       = ['']  #Comparison stars you don't want to include in the detrending, e.g. 'comp2'.
-bad_objs        = ['']  #Comparison/chip combinations from coordinates file that you don't want to include, e.g. 'comp2_3'.
-Interactive = True      #Set to false to save PDF.
-n_to_add        = np.inf        #Number of frames to add before stopping to display plot
-                                                        #np.inf = only displays the plot after all existing frames are added.
-
-slitwidth = 55         #roughly the slit width in pixels
-basewindow = 45         #pixels used in median filter to obtain background
-medfilter = 13          #points used in median filter for plot
-
-ing_time = ['2018-06-04T06:21:00.0']
-mid_time = ['2018-06-04T07:26:00.0']
-egr_time = ['2018-06-04T08:31:0.0']
-
-p = 0.1155                                                      #planet-to-star radius ratio (Rp/Rs)
-p_err = 0.0022
-source = '(--- et al.)'
-"""
 ##DERIVED VALUES#############################
 
 ing_time.append(dateutil.parser.parse(ing_time[0]))
@@ -405,6 +377,7 @@ while Updating:
         print(f"{filedir}/{pklname}")
         savepickle(pickle_out, f"{filedir}/{pklname}")
     # print flux_ratio,np.median(oot_flux)
+    print(flux_ratio, oot_flux)
     flux_ratio = flux_ratio / np.median(oot_flux)
 
     print("\n\tTotal number of frames:", len(time))
