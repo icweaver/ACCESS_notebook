@@ -1461,7 +1461,7 @@ def compare_arc_lines(
             fpath_lines,
             usecols=["Wav", "Pix", "Chip"],
             escapechar='#',
-            sep = '\t'
+            #sep = '\t'
         )
         wavs = df_lco["Wav"].to_numpy().flatten()
         pixels = df_lco["Pix"].to_numpy().flatten()
